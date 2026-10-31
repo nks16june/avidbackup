@@ -10,7 +10,7 @@ from pathlib import Path
 
 from avidbackup.secure_cli import mysql_defaults_file, pgpass_file, resolve_secret
 from avidbackup.store import DatabaseConfig
-from avidbackup.util_bin import find_mysql, find_psql
+from avidbackup.util_bin import find_mysql, find_pg_restore, find_psql
 
 log = logging.getLogger(__name__)
 
@@ -175,9 +175,12 @@ def _restore_mysql(plan: dict, *, password: str, dump: Path) -> int:
 def _restore_postgres(plan: dict, *, password: str, dump: Path) -> int:
     is_custom = str(dump).endswith(".dump") or str(dump).endswith(".dump.gz")
     if is_custom:
-        pg_restore = shutil.which("pg_restore")
+        pg_restore = find_pg_restore()
         if not pg_restore:
-            print("pg_restore not found on PATH", file=sys.stderr)
+            print(
+                "pg_restore not found. Run: avidbackup tools install-postgres",
+                file=sys.stderr,
+            )
             return 2
         work = dump
         tmp: Path | None = None

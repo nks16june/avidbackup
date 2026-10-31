@@ -29,7 +29,10 @@ hiddenimports += [
 
 STATIC = SRC / "avidbackup" / "webui" / "static"
 
-datas = [(str(TEMPLATES), os.path.join("avidbackup", "webui", "templates"))]
+datas = [
+    (str(TEMPLATES), os.path.join("avidbackup", "webui", "templates")),
+    (str(SRC / "avidbackup" / "data"), os.path.join("avidbackup", "data")),
+]
 if STATIC.is_dir():
     datas.append((str(STATIC), os.path.join("avidbackup", "webui", "static")))
 

@@ -42,16 +42,31 @@ def find_mysql() -> str | None:
     return None
 
 
+def _managed_pg(name: str) -> str | None:
+    """Tool installed by `avidbackup tools install-postgres` (Windows)."""
+    from avidbackup.pgtools import installed_tool
+
+    return installed_tool(name)
+
+
 def find_pg_dump() -> str | None:
-    return which_first("pg_dump") or _path_if_exists(
+    return _managed_pg("pg_dump") or which_first("pg_dump") or _path_if_exists(
         "/usr/bin/pg_dump",
         "/usr/local/bin/pg_dump",
         "/opt/homebrew/bin/pg_dump",
     )
 
 
+def find_pg_restore() -> str | None:
+    return _managed_pg("pg_restore") or which_first("pg_restore") or _path_if_exists(
+        "/usr/bin/pg_restore",
+        "/usr/local/bin/pg_restore",
+        "/opt/homebrew/bin/pg_restore",
+    )
+
+
 def find_psql() -> str | None:
-    return which_first("psql") or _path_if_exists(
+    return _managed_pg("psql") or which_first("psql") or _path_if_exists(
         "/usr/bin/psql",
         "/usr/local/bin/psql",
         "/opt/homebrew/bin/psql",

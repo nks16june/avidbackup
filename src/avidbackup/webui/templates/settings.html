@@ -68,4 +68,24 @@
       <button class="btn btn-primary" type="submit">Save settings</button>
     </p>
   </form>
+
+  <h2 style="margin-top:2rem;">Optional tools</h2>
+  <div class="card">
+    <strong>PostgreSQL client tools</strong>
+    <p class="muted">Only needed if you back up PostgreSQL databases. MySQL, MariaDB and SQLite work without them.</p>
+    {% if pg_tools.pg_dump %}
+      <p>Installed: <code>{{ pg_tools.pg_dump }}</code></p>
+    {% else %}
+      <p>Not installed.</p>
+      {% if pg_tools.windows %}
+        <form method="post" action="{{ url_for('install_postgres') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn" type="submit">Download PostgreSQL tools (about 5 MB)</button>
+          <div class="hint">Fetched from the official PostgreSQL Windows binaries and checksum-verified.</div>
+        </form>
+      {% else %}
+        <p class="hint">Install with your package manager, e.g. <code>sudo apt install postgresql-client</code> or <code>brew install libpq</code>.</p>
+      {% endif %}
+    {% endif %}
+  </div>
 {% endblock %}

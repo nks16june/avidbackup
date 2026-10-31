@@ -11,6 +11,7 @@ from flask import Flask, flash, redirect, render_template, request, session, url
 
 from avidbackup.initial_full import has_completed_initial_full
 from avidbackup.paths import app_root, ensure_layout
+from avidbackup.pgtools import PgToolsError, install_postgres_tools
 from avidbackup.procutil import cli_command
 from avidbackup.settings_builder import settings_from_account
 from avidbackup.store import (
@@ -25,6 +26,7 @@ from avidbackup.store import (
     save_config,
     upsert_account,
 )
+from avidbackup.util_bin import find_pg_dump, find_psql
 from avidbackup.validation import validate_account_id
 from avidbackup.webui.security import (
     is_loopback_host,
@@ -92,7 +94,24 @@ def create_app() -> Flask:
 
     @app.get("/settings")
     def global_settings():
-        return render_template("settings.html", cfg=load_config())
+        return render_template(
+            "settings.html",
+            cfg=load_config(),
+            pg_tools={
+                "pg_dump": find_pg_dump(),
+                "psql": find_psql(),
+                "windows": sys.platform == "win32",
+            },
+        )
+
+    @app.post("/tools/install-postgres")
+    def install_postgres():
+        try:
+            install_postgres_tools()
+            flash("PostgreSQL tools installed.", "ok")
+        except PgToolsError as exc:
+            flash(f"Could not install PostgreSQL tools: {exc}", "bad")
+        return redirect(url_for("global_settings"))
 
     @app.post("/settings")
     def save_global_settings():

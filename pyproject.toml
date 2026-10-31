@@ -61,7 +61,7 @@ version = { attr = "avidbackup.__version__" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-avidbackup = ["webui/templates/*.html", "webui/static/*"]
+avidbackup = ["webui/templates/*.html", "webui/static/*", "data/*.json"]
 
 [tool.ruff]
 line-length = 100

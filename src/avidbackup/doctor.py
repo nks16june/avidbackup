@@ -31,7 +31,7 @@ def run_doctor() -> int:
     my = find_mysql()
     rows.append(("mysql client", bool(my), my or "optional"))
     pg = find_pg_dump()
-    rows.append(("pg_dump", bool(pg), pg or "needed for PostgreSQL dumps"))
+    rows.append(("pg_dump", bool(pg), pg or "only needed for PostgreSQL; run: avidbackup tools install-postgres"))
     psql = find_psql()
     rows.append(("psql", bool(psql), psql or "optional for Postgres table sizes"))
 

@@ -46,6 +46,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"; Flags: unchecked
+Name: "pgtools"; Description: "Download PostgreSQL backup tools (about 5 MB; only needed for PostgreSQL databases)"; GroupDescription: "Optional components:"; Flags: unchecked
 Name: "scheduledtask"; Description: "Install daily scheduled task (02:00)"; GroupDescription: "Automation:"; Flags: unchecked
 
 [Files]
@@ -59,6 +60,7 @@ Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
+Filename: "{app}\{#MyAppExeName}"; Parameters: "tools install-postgres"; StatusMsg: "Downloading PostgreSQL tools..."; Tasks: pgtools; Flags: runhidden waituntilterminated
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 Filename: "powershell.exe"; \
   Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$action = New-ScheduledTaskAction -Execute '{app}\{#MyAppExeName}' -Argument 'run'; $trigger = New-ScheduledTaskTrigger -Daily -At 2am; Register-ScheduledTask -TaskName 'AvidBackup-Daily' -Action $action -Trigger $trigger -Force"""; \

@@ -54,7 +54,7 @@ Full write-up (fairness notes, when *not* to use, limitations): **[docs/COMPARIS
 | **Local-first** | Archives on your disk (PC, NAS, VPS) |
 | **Never deletes locals** | Remote deletes do not wipe your archive |
 | **Initial full gate** | Incremental only after a zero-failure full |
-| **Multi-DB** | MySQL/MariaDB, PostgreSQL, SQLite |
+| **Multi-DB** | MySQL/MariaDB, SQLite, PostgreSQL (client tools are an optional ~5 MB download on Windows) |
 | **Secure defaults** | FTPS verify, SFTP TOFU, CSRF, loopback UI |
 
 ## Security & privacy

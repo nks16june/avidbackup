@@ -96,6 +96,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
 
     sub.add_parser("doctor", help="Check Python, tools, and write permissions")
+
+    p_tools = sub.add_parser("tools", help="Optional helper tools (PostgreSQL client)")
+    tools_sub = p_tools.add_subparsers(dest="tools_command", required=True)
+    tools_sub.add_parser(
+        "install-postgres",
+        help="Download pg_dump/psql/pg_restore (Windows, ~5 MB, checksum-verified)",
+    )
+    tools_sub.add_parser("status", help="Show which database tools were found")
     return p.parse_args(argv)
 
 
@@ -359,6 +367,36 @@ def cmd_run(args: argparse.Namespace) -> int:
     return worst
 
 
+def cmd_tools(args: argparse.Namespace) -> int:
+    from avidbackup.paths import logs_dir
+    from avidbackup.pgtools import PgToolsError, install_postgres_tools
+    from avidbackup.util_bin import find_pg_dump, find_pg_restore, find_psql
+
+    if args.tools_command == "status":
+        for label, found in (
+            ("pg_dump", find_pg_dump()),
+            ("pg_restore", find_pg_restore()),
+            ("psql", find_psql()),
+        ):
+            print(f"{label}: {found or 'not found'}")
+        return 0
+
+    ensure_layout()
+    log_file = logs_dir() / "tools.log"
+
+    def say(msg: str) -> None:
+        print(msg)
+        with log_file.open("a", encoding="utf-8") as fh:
+            fh.write(f"{msg}\n")
+
+    try:
+        install_postgres_tools(say)
+    except PgToolsError as exc:
+        say(f"ERROR: {exc}")
+        return 1
+    return 0
+
+
 def run(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.version:
@@ -368,7 +406,7 @@ def run(argv: list[str] | None = None) -> int:
     if cmd is None:
         # Avoid SystemExit from argparse --help so callers/tests can handle the return code
         print(
-            "Use: avidbackup {app,ui,run,list,init,verify,restore-db,doctor} — "
+            "Use: avidbackup {app,ui,run,list,init,verify,restore-db,doctor,tools} — "
             "try avidbackup --help"
         )
         return 0
@@ -396,6 +434,8 @@ def run(argv: list[str] | None = None) -> int:
         return cmd_restore_db(args)
     if cmd == "doctor":
         return run_doctor()
+    if cmd == "tools":
+        return cmd_tools(args)
     if cmd == "run":
         return cmd_run(args)
     return 2
