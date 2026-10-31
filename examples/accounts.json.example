@@ -1,0 +1,88 @@
+{
+  "version": 3,
+  "data_root": "./data",
+  "mysql_retention_days": 15,
+  "files_keep_forever": true,
+  "large_table_mb": 50,
+  "download_retries": 3,
+  "compress_dumps": "gzip",
+  "ui_host": "127.0.0.1",
+  "ui_port": 8787,
+  "ui_token": "",
+  "notify": {
+    "webhook_url": "",
+    "webhook_secret": "",
+    "smtp_host": "",
+    "smtp_port": 587,
+    "smtp_user": "",
+    "smtp_password": "",
+    "smtp_password_env": "",
+    "smtp_from": "",
+    "smtp_to": "",
+    "smtp_tls": true
+  },
+  "accounts": [
+    {
+      "id": "example.com",
+      "label": "Example Site",
+      "domain": "example.com",
+      "site_url": "https://example.com",
+      "enabled": true,
+      "ftp": {
+        "protocol": "ftps",
+        "host": "ftp.example.com",
+        "port": 21,
+        "user": "example",
+        "password": "",
+        "password_env": "EXAMPLE_FTP_PASS",
+        "tls_explicit": true,
+        "passive": true,
+        "remote_root": "/public_html",
+        "verify_tls": true,
+        "host_key_policy": "tofu"
+      },
+      "databases": [
+        {
+          "id": "main",
+          "type": "mysql",
+          "label": "Main MySQL",
+          "host": "203.0.113.10",
+          "port": 3306,
+          "user": "app",
+          "password": "",
+          "password_env": "EXAMPLE_MYSQL_PASS",
+          "database": "app",
+          "compress": "gzip",
+          "enabled": true,
+          "ssl": false
+        },
+        {
+          "id": "analytics",
+          "type": "postgres",
+          "label": "Analytics PG",
+          "host": "203.0.113.10",
+          "port": 5432,
+          "user": "analytics",
+          "password_env": "EXAMPLE_PG_PASS",
+          "database": "analytics",
+          "format": "plain",
+          "compress": "gzip",
+          "enabled": false
+        },
+        {
+          "id": "localcache",
+          "type": "sqlite",
+          "label": "Local SQLite",
+          "path": "./sample.sqlite",
+          "compress": "gzip",
+          "enabled": false
+        }
+      ],
+      "retention": {
+        "mysql_days": 15,
+        "files_forever": true,
+        "files_days": 0
+      }
+    }
+  ]
+}

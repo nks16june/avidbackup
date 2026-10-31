@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Login · {{ brand }}{% endblock %}
+{% block body %}
+  <h1>UI access token</h1>
+  <p class="muted">This UI is protected because a token is configured (or the host is non-loopback).</p>
+  <form method="post" action="{{ url_for('login_submit') }}" class="card" style="margin-top:1rem;max-width:420px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label>Token</label>
+    <input type="password" name="token" required autocomplete="current-password">
+    <p style="margin-top:1rem;"><button class="btn btn-primary" type="submit">Sign in</button></p>
+  </form>
+{% endblock %}

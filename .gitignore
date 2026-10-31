@@ -1,0 +1,35 @@
+# Secrets & local config
+.env
+accounts.json
+config/accounts/
+config/ui_secret_key
+config/known_hosts
+config/*.key
+
+# Runtime
+data/
+logs/
+*.log
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+src/*.egg-info/
+dist/
+build/*
+!build/pyinstaller/
+!build/pyinstaller/**
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
+Thumbs.db
+
+# Transfer / lock markers
+**/.transfer_status.json
+**/.backup_run.lock
+**/.manifest.json
+**/history.sqlite3
+**/.initial_full_done.json
+**/.mysql_table_sizes.json

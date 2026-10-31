@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · {{ brand }}{% endblock %}
+{% block body %}
+  <h1>{{ title }}</h1>
+  <form method="post" action="{{ url_for('save_account') }}" class="card" style="margin-top:1rem;" id="acctForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="id" value="{{ account.id if account else '' }}">
+
+    <h2>Website</h2>
+    <div class="row">
+      <div>
+        <label>Label</label>
+        <input name="label" required value="{{ account.label if account else '' }}" placeholder="My site">
+      </div>
+      <div>
+        <label>Domain</label>
+        <input name="domain" value="{{ account.domain if account else '' }}" placeholder="example.com">
+      </div>
+      <div>
+        <label>Site URL</label>
+        <input name="site_url" value="{{ account.site_url if account else '' }}" placeholder="https://example.com">
+      </div>
+    </div>
+    <label class="check"><input type="checkbox" name="enabled" {% if not account or account.enabled %}checked{% endif %}> Enabled</label>
+
+    <h2>FTP / SFTP</h2>
+    <div class="row">
+      <div>
+        <label>Protocol</label>
+        <select name="ftp_protocol">
+          {% set proto = account.ftp.protocol if account else 'ftps' %}
+          <option value="ftps" {% if proto=='ftps' %}selected{% endif %}>FTPS (explicit TLS)</option>
+          <option value="ftp" {% if proto=='ftp' %}selected{% endif %}>FTP</option>
+          <option value="sftp" {% if proto=='sftp' %}selected{% endif %}>SFTP</option>
+        </select>
+      </div>
+      <div>
+        <label>Host</label>
+        <input name="ftp_host" required value="{{ account.ftp.host if account else '' }}" placeholder="ftp.example.com">
+      </div>
+      <div>
+        <label>Port</label>
+        <input type="number" name="ftp_port" value="{{ account.ftp.port if account else 21 }}">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>User</label>
+        <input name="ftp_user" required value="{{ account.ftp.user if account else '' }}">
+      </div>
+      <div>
+        <label>Password</label>
+        <input type="password" name="ftp_password" value="" autocomplete="new-password" placeholder="•••• (leave blank to keep current)">
+      </div>
+      <div>
+        <label>Or password env var</label>
+        <input name="ftp_password_env" value="{{ account.ftp.password_env if account else '' }}" placeholder="AVIDBACKUP_FTP_PASS">
+      </div>
+      <div>
+        <label>Remote files root</label>
+        <input name="ftp_remote_root" value="{{ account.ftp.remote_root if account else '/public_html' }}">
+      </div>
+    </div>
+    <div class="row">
+      <label class="check"><input type="checkbox" name="ftp_tls" {% if not account or account.ftp.tls_explicit %}checked{% endif %}> TLS explicit (FTPS)</label>
+      <label class="check"><input type="checkbox" name="ftp_passive" {% if not account or account.ftp.passive %}checked{% endif %}> Passiveive mode</label>
+      <label class="check"><input type="checkbox" name="ftp_verify_tls" {% if not account or account.ftp.verify_tls %}checked{% endif %}> Verify FTPS certificate</label>
+      <div>
+        <label>SFTP host key policy</label>
+        {% set hkp = account.ftp.host_key_policy if account else 'tofu' %}
+        <select name="ftp_host_key_policy">
+          <option value="tofu" {% if hkp=='tofu' %}selected{% endif %}>tofu (trust on first use)</option>
+          <option value="strict" {% if hkp=='strict' %}selected{% endif %}>strict</option>
+          <option value="insecure" {% if hkp=='insecure' %}selected{% endif %}>insecure (not recommended)</option>
+        </select>
+      </div>
+    </div>
+
+    <h2>Databases <span class="muted">(optional · multiple · mysql / postgres / sqlite)</span></h2>
+    <div id="dbList">
+      {% set dbs = account.databases if account and account.databases else [] %}
+      {% for d in dbs %}
+        <div class="db-block" data-db>
+          <input type="hidden" name="db_id_{{ loop.index0 }}" value="{{ d.id }}">
+          <div class="row">
+            <div>
+              <label>Type</label>
+              <select name="db_type_{{ loop.index0 }}">
+                <option value="mysql" {% if d.type=='mysql' %}selected{% endif %}>MySQL / MariaDB</option>
+                <option value="postgres" {% if d.type=='postgres' %}selected{% endif %}>PostgreSQL</option>
+                <option value="sqlite" {% if d.type=='sqlite' %}selected{% endif %}>SQLite</option>
+              </select>
+            </div>
+            <div><label>Label</label><input name="db_label_{{ loop.index0 }}" value="{{ d.label }}"></div>
+            <div><label>Database name</label><input name="db_database_{{ loop.index0 }}" value="{{ d.database }}"></div>
+            <div><label>Host</label><input name="db_host_{{ loop.index0 }}" value="{{ d.host }}" placeholder="server IP"></div>
+            <div><label>Port</label><input type="number" name="db_port_{{ loop.index0 }}" value="{{ d.port }}"></div>
+          </div>
+          <div class="row">
+            <div><label>User</label><input name="db_user_{{ loop.index0 }}" value="{{ d.user }}"></div>
+            <div><label>Password</label><input type="password" name="db_password_{{ loop.index0 }}" value="" autocomplete="new-password" placeholder="•••• (leave blank to keep current)"></div>
+            <div><label>Or password env</label><input name="db_password_env_{{ loop.index0 }}" value="{{ d.password_env }}"></div>
+            <div><label>SQLite path</label><input name="db_path_{{ loop.index0 }}" value="{{ d.path }}" placeholder="/path/to/db.sqlite"></div>
+          </div>
+          <div class="row">
+            <div>
+              <label>Compress</label>
+              <select name="db_compress_{{ loop.index0 }}">
+                <option value="gzip" {% if d.compress=='gzip' %}selected{% endif %}>gzip</option>
+                <option value="none" {% if d.compress=='none' %}selected{% endif %}>none</option>
+              </select>
+            </div>
+            <div>
+              <label>Postgres format</label>
+              <select name="db_format_{{ loop.index0 }}">
+                <option value="plain" {% if d.format=='plain' %}selected{% endif %}>plain SQL</option>
+                <option value="custom" {% if d.format=='custom' %}selected{% endif %}>custom (-Fc)</option>
+              </select>
+            </div>
+            <label class="check"><input type="checkbox" name="db_enabled_{{ loop.index0 }}" {% if d.enabled %}checked{% endif %}> Enabled</label>
+            <label class="check"><input type="checkbox" name="db_discover_{{ loop.index0 }}" {% if d.discover_from_site %}checked{% endif %}> Discover MySQL from site config</label>
+            <label class="check"><input type="checkbox" name="db_ssl_{{ loop.index0 }}" {% if d.ssl %}checked{% endif %}> SSL / TLS (MySQL &amp; Postgres)</label>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+    <input type="hidden" name="db_count" id="dbCount" value="{{ dbs|length }}">
+    <p style="margin-top:0.75rem;"><button type="button" class="btn" id="addDb">+ Add database</button></p>
+
+    <h2>Retention</h2>
+    <div class="row">
+      <div>
+        <label>Database dumps keep (days)</label>
+        <input type="number" min="1" name="mysql_days" value="{{ account.retention.mysql_days if account else 15 }}">
+      </div>
+      <div>
+        <label>Files days (if not forever)</label>
+        <input type="number" min="0" name="files_days" value="{{ account.retention.files_days if account else 0 }}">
+      </div>
+    </div>
+    <label class="check"><input type="checkbox" name="files_forever" {% if not account or account.retention.files_forever %}checked{% endif %}> Keep website files forever</label>
+
+    <p style="margin-top:1.4rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+      <button class="btn btn-primary" type="submit">Save account</button>
+      <a class="btn" href="{{ url_for('index') }}">Cancel</a>
+    </p>
+  </form>
+
+  <template id="dbTpl">
+    <div class="db-block" data-db>
+      <input type="hidden" name="db_id_IDX" value="">
+      <div class="row">
+        <div>
+          <label>Type</label>
+          <select name="db_type_IDX">
+            <option value="mysql" selected>MySQL / MariaDB</option>
+            <option value="postgres">PostgreSQL</option>
+            <option value="sqlite">SQLite</option>
+          </select>
+        </div>
+        <div><label>Label</label><input name="db_label_IDX" value=""></div>
+        <div><label>Database name</label><input name="db_database_IDX" value=""></div>
+        <div><label>Host</label><input name="db_host_IDX" value="" placeholder="server IP"></div>
+        <div><label>Port</label><input type="number" name="db_port_IDX" value="3306"></div>
+      </div>
+      <div class="row">
+        <div><label>User</label><input name="db_user_IDX" value=""></div>
+        <div><label>Password</label><input type="password" name="db_password_IDX" value="" autocomplete="new-password" placeholder="•••• (leave blank to keep current)"></div>
+        <div><label>Or password env</label><input name="db_password_env_IDX" value=""></div>
+        <div><label>SQLite path</label><input name="db_path_IDX" value=""></div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Compress</label>
+          <select name="db_compress_IDX"><option value="gzip" selected>gzip</option><option value="none">none</option></select>
+        </div>
+        <div>
+          <label>Postgres format</label>
+          <select name="db_format_IDX"><option value="plain" selected>plain SQL</option><option value="custom">custom</option></select>
+        </div>
+        <label class="check"><input type="checkbox" name="db_enabled_IDX" checked> Enabled</label>
+        <label class="check"><input type="checkbox" name="db_discover_IDX"> Discover MySQL from site config</label>
+        <label class="check"><input type="checkbox" name="db_ssl_IDX"> SSL / TLS (MySQL &amp; Postgres)</label>
+      </div>
+    </div>
+  </template>
+  <script>
+    (function () {
+      const list = document.getElementById('dbList');
+      const count = document.getElementById('dbCount');
+      const tpl = document.getElementById('dbTpl').innerHTML;
+      document.getElementById('addDb').addEventListener('click', function () {
+        const i = Number(count.value || 0);
+        list.insertAdjacentHTML('beforeend', tpl.replaceAll('IDX', String(i)));
+        count.value = String(i + 1);
+      });
+    })();
+  </script>
+{% endblock %}

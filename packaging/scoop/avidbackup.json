@@ -1,0 +1,26 @@
+{
+  "version": "0.1.0",
+  "description": "Free, local-first backup utility for websites and databases.",
+  "homepage": "https://github.com/avidwebsolutions/avidbackup",
+  "license": "MIT",
+  "url": "https://github.com/avidwebsolutions/avidbackup/releases/download/v0.1.0/AvidBackup-Setup-0.1.0.exe",
+  "hash": "sha256:REPLACE_WITH_RELEASE_SHA256",
+  "installer": {
+    "args": ["/VERYSILENT", "/NORESTART", "/SUPPRESSMSGBOXES", "/DIR=\"$dir\""]
+  },
+  "uninstaller": {
+    "file": "unins000.exe",
+    "args": ["/VERYSILENT", "/NORESTART"]
+  },
+  "bin": "avidbackup.exe",
+  "shortcuts": [
+    ["avidbackup.exe", "AvidBackup"]
+  ],
+  "checkver": {
+    "github": "https://github.com/avidwebsolutions/avidbackup"
+  },
+  "autoupdate": {
+    "url": "https://github.com/avidwebsolutions/avidbackup/releases/download/v$version/AvidBackup-Setup-$version.exe"
+  },
+  "_comment": "Template only — submit to a Scoop bucket after the first GitHub Release. Replace hash. Last reviewed: October 2026."
+}

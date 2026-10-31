@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Accounts · {{ brand }}{% endblock %}
+{% block body %}
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
+    <div>
+      <h1>Website accounts</h1>
+      <p class="muted" style="margin:0;">Add FTP + one or more databases, set retention, then run backup.</p>
+    </div>
+    <form method="post" action="{{ url_for('run_all') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-warn" type="submit">Backup all enabled</button>
+    </form>
+  </div>
+
+  {% if not rows %}
+    <div class="card" style="margin-top:1rem;">
+      <p>No accounts yet.</p>
+      <a class="btn btn-primary" href="{{ url_for('new_account') }}">Add your first website</a>
+    </div>
+  {% else %}
+    <table style="margin-top:1rem;">
+      <thead>
+        <tr>
+          <th>Account</th>
+          <th>FTP</th>
+          <th>DBs</th>
+          <th>Retention</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          {% set a = row.account %}
+          <tr>
+            <td>
+              <strong>{{ a.label }}</strong>
+              {% if not a.enabled %}<span class="bad"> · off</span>{% endif %}
+              <div class="mono">{{ a.id }} · <a href="{{ a.site_url }}" target="_blank" rel="noopener">{{ a.site_url }}</a></div>
+              <div class="mono">{{ row.data_dir }}</div>
+            </td>
+            <td class="mono">{{ a.ftp.protocol }}://{{ a.ftp.user }}@{{ a.ftp.host }}:{{ a.ftp.port }}</td>
+            <td>{{ row.db_count }}</td>
+            <td>MySQL {{ a.retention.mysql_days }}d<br>
+              {% if a.retention.files_forever %}<span class="ok">files forever</span>{% else %}files {{ a.retention.files_days }}d{% endif %}
+            </td>
+            <td class="{% if row.initial_done %}ok{% else %}bad{% endif %}">
+              {% if row.initial_done %}full done{% else %}needs full{% endif %}
+            </td>
+            <td style="white-space:nowrap;">
+              <a class="btn" href="{{ url_for('edit_account', account_id=a.id) }}">Edit</a>
+              <form style="display:inline" method="post" action="{{ url_for('run_backup', account_id=a.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="btn btn-primary" type="submit">Backup</button>
+              </form>
+              <form style="display:inline" method="post" action="{{ url_for('remove_account', account_id=a.id) }}" onsubmit="return confirm('Remove {{ a.id }} from config? Data folder is kept.');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="btn btn-danger" type="submit">Remove</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,28 @@
+# Example: NAS / VPS deployment of AvidBackup
+# Usage:
+#   export AVIDBACKUP_UI_TOKEN='long-random-token'
+#   docker compose up -d
+#
+# Cron / scheduled backups: use the host/NAS scheduler to run
+#   docker compose exec -T avidbackup avidbackup run
+# or a separate one-shot service with a cron image.
+
+services:
+  avidbackup:
+    build: .
+    image: avidbackup:local
+    container_name: avidbackup
+    restart: unless-stopped
+    environment:
+      AVIDBACKUP_HOME: /data
+      AVIDBACKUP_UI_TOKEN: ${AVIDBACKUP_UI_TOKEN:?set AVIDBACKUP_UI_TOKEN}
+      AVIDBACKUP_NO_BROWSER: "1"
+      AVIDBACKUP_NO_TRAY: "1"
+    ports:
+      - "8787:8787"
+    volumes:
+      - avidbackup-data:/data
+    # UI listens on 0.0.0.0 inside the container; token required by entrypoint + app
+
+volumes:
+  avidbackup-data:

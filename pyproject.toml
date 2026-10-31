@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "avidbackup"
+dynamic = ["version"]
+description = "Free, local-first backup utility for websites and databases. Pulls files (FTP/FTPS/SFTP) and database dumps to your own machine. No cloud, no telemetry."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Nishant Shrivastava", email = "nishant@avidwebsolutions.in" },
+]
+maintainers = [
+  { name = "Avid Web Solutions", email = "nishant@avidwebsolutions.in" },
+]
+keywords = ["backup", "ftp", "ftps", "sftp", "mysql", "postgres", "sqlite", "hosting"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Environment :: Web Environment",
+  "Intended Audience :: System Administrators",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: System :: Archiving :: Backup",
+]
+dependencies = [
+  "python-dotenv>=1.0.0,<2",
+  "PyMySQL>=1.1.0,<2",
+  "paramiko>=3.4.0,<4",
+  "flask>=3.0.0,<4",
+]
+
+[project.optional-dependencies]
+desktop = ["pystray>=0.19", "Pillow>=10.0"]
+dev = ["pytest>=7.0", "ruff>=0.6", "build", "wheel"]
+
+
+[project.urls]
+Homepage = "https://avidwebsolutions.in"
+Documentation = "https://github.com/avidwebsolutions/avidbackup#readme"
+Repository = "https://github.com/avidwebsolutions/avidbackup"
+Issues = "https://github.com/avidwebsolutions/avidbackup/issues"
+"Avid ERP" = "https://aviderp.com"
+
+[project.scripts]
+avidbackup = "avidbackup.main:cli"
+
+[tool.setuptools.dynamic]
+version = { attr = "avidbackup.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+avidbackup = ["webui/templates/*.html", "webui/static/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "integration: tests that need real network services (skipped by default)",
+]
+addopts = "-q"

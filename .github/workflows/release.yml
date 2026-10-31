@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build-python:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      # id-token: write   # enable for PyPI trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build sdist + wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: dist/*
+      - name: GitHub Release (Python packages)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+      # Uncomment after configuring PyPI trusted publishing for this repo:
+      # - name: Publish to PyPI
+      #   uses: pypa/gh-action-pypi-publish@release/v1
+
+  windows-installer:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package + PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[desktop]" pyinstaller
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+      - name: Build exe (PyInstaller)
+        run: |
+          pyinstaller --noconfirm build/pyinstaller/avidbackup.spec
+          if (!(Test-Path dist/avidbackup.exe)) { throw "exe missing" }
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+      - name: Compile installer
+        shell: cmd
+        run: |
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=%VERSION% /DDistDir=%CD%\dist installer\avidbackup.iss
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+      - name: SHA256
+        shell: bash
+        run: |
+          SETUP="dist/AvidBackup-Setup-${{ steps.ver.outputs.version }}.exe"
+          sha256sum "$SETUP" | tee "${SETUP}.sha256"
+      # Optional SignPath code signing (configure org secrets, then uncomment):
+      # - name: Sign with SignPath
+      #   uses: signpath/github-action-submit-signing-request@v1
+      #   with:
+      #     api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+      #     organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+      #     project-slug: avidbackup
+      #     signing-policy-slug: release-signing
+      #     artifact-configuration-slug: windows-installer
+      #     github-artifact-id: <set when using artifact upload>
+      #     wait-for-completion: true
+      - name: Attach Windows installer to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/AvidBackup-Setup-${{ steps.ver.outputs.version }}.exe
+            dist/AvidBackup-Setup-${{ steps.ver.outputs.version }}.exe.sha256

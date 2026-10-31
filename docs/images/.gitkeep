@@ -1,0 +1,9 @@
+# Screenshot placeholders for README "First backup in 5 minutes"
+#
+#   ui-dashboard.png   — accounts list / home
+#   ui-add-site.png    — add website form
+#   ui-progress.png    — backup / transfer progress
+#   ui-settings.png    — global settings
+#   cli-doctor.png     — avidbackup doctor
+#
+# See docs/PACKAGING.md checklist. Do not include real passwords or private hostnames.

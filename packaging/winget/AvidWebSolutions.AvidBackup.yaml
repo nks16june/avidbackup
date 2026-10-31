@@ -1,0 +1,22 @@
+# Template winget manifest — submit AFTER the first GitHub Release exists.
+# Replace Version, InstallerUrl, and InstallerSha256 with release values.
+# Docs: https://github.com/microsoft/winget-pkgs
+# Last reviewed: October 2026
+
+PackageIdentifier: AvidWebSolutions.AvidBackup
+PackageVersion: 0.1.0
+DefaultLocale: en-US
+ManifestType: singleton
+ManifestVersion: 1.6.0
+PackageLocale: en-US
+Publisher: Avid Web Solutions
+PublisherUrl: https://avidwebsolutions.in
+PackageName: AvidBackup
+License: MIT
+ShortDescription: Free, local-first backup utility for websites and databases (FTP/FTPS/SFTP + MySQL/Postgres/SQLite).
+Installers:
+  - Architecture: x64
+    InstallerType: inno
+    InstallerUrl: https://github.com/avidwebsolutions/avidbackup/releases/download/v0.1.0/AvidBackup-Setup-0.1.0.exe
+    InstallerSha256: REPLACE_WITH_RELEASE_SHA256
+    Scope: user

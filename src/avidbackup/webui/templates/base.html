@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ brand }}{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg0: #0c1412;
+      --bg1: #13201c;
+      --panel: #1a2b26;
+      --line: #2a4038;
+      --text: #e7f0eb;
+      --muted: #8aa399;
+      --accent: #3dba7a;
+      --accent2: #c4a35a;
+      --bad: #e07070;
+      --ok: #3dba7a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "DM Sans", system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(900px 420px at 100% 0%, #1e3d32 0%, transparent 55%),
+        linear-gradient(165deg, #0a100e, #13201c 50%, #0c1412);
+    }
+    a { color: #7ec8a3; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    header {
+      display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem;
+      padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--line);
+    }
+    .brand { font-size: 1.45rem; font-weight: 700; letter-spacing: -0.02em; }
+    .sub { color: var(--muted); font-size: 0.9rem; margin-top: 0.2rem; }
+    nav { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .btn {
+      appearance: none; border: 1px solid var(--line); background: var(--panel);
+      color: var(--text); padding: 0.5rem 0.85rem; border-radius: 8px;
+      font: inherit; cursor: pointer; text-decoration: none; display: inline-block;
+    }
+    .btn:hover { border-color: #3d5c4e; text-decoration: none; }
+    .btn-primary { background: #1d4a35; border-color: var(--accent); }
+    .btn-warn { background: #3a3018; border-color: var(--accent2); }
+    .btn-danger { background: #3a1c1c; border-color: var(--bad); }
+    main { padding: 1.25rem 1.5rem 3rem; max-width: 1100px; }
+    .flash { padding: 0.7rem 0.9rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid; }
+    .flash.ok { background: #143226; border-color: #2f6b4d; color: #b7efd0; }
+    .flash.bad { background: #321818; border-color: #7a3030; color: #ffc9c9; }
+    table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    th, td { text-align: left; padding: 0.7rem 0.85rem; border-bottom: 1px solid var(--line); font-size: 0.92rem; vertical-align: top; }
+    th { color: var(--muted); background: #12201b; font-weight: 600; }
+    tr:last-child td { border-bottom: 0; }
+    .mono { font-family: "IBM Plex Mono", monospace; font-size: 0.82rem; color: var(--muted); word-break: break-all; }
+    .ok { color: var(--ok); } .bad { color: var(--bad); } .muted { color: var(--muted); }
+    .card {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+      padding: 1.1rem 1.2rem; margin-bottom: 1rem;
+    }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin: 0.65rem 0 0.25rem; }
+    input, select, textarea {
+      width: 100%; padding: 0.55rem 0.7rem; border-radius: 8px;
+      border: 1px solid var(--line); background: #0f1a16; color: var(--text); font: inherit;
+    }
+    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; }
+    .check { display: flex; align-items: center; gap: 0.45rem; margin-top: 1.2rem; color: var(--text); }
+    .check input { width: auto; }
+    h1 { font-size: 1.35rem; margin: 0 0 0.35rem; }
+    h2 { font-size: 1.05rem; margin: 1.4rem 0 0.6rem; }
+    .db-block { border: 1px dashed var(--line); border-radius: 10px; padding: 0.85rem; margin-top: 0.75rem; }
+    footer { margin-top: 2rem; color: var(--muted); font-size: 0.82rem; }
+    .hint { font-size: 0.8rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <div class="brand">{{ brand }}</div>
+      <div class="sub">{{ vendor }} · {{ author }} · home <span class="mono">{{ home }}</span></div>
+    </div>
+    <nav>
+      <a class="btn" href="{{ url_for('index') }}">Accounts</a>
+      <a class="btn" href="{{ url_for('global_settings') }}">Retention & paths</a>
+      <a class="btn btn-primary" href="{{ url_for('new_account') }}">Add website</a>
+    </nav>
+  </header>
+  <main>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <div class="flash {{ cat }}">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% block body %}{% endblock %}
+    <footer>Free MIT utility · runs on Windows, macOS, and Linux · backups stay on your machine</footer>
+  </main>
+</body>
+</html>
