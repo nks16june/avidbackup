@@ -25,6 +25,7 @@ class SqliteDumper(DbDumper):
             tmp = self.settings.local_mysql_dir / f".sqlite_fetch_{self.db.id}"
             tmp.parent.mkdir(parents=True, exist_ok=True)
             self.remote.download_file(remote, tmp)
+            self._fetched_tmp = tmp
             return tmp
         raise FileNotFoundError(f"SQLite path not found: {self.db.path!r}")
 
@@ -35,6 +36,13 @@ class SqliteDumper(DbDumper):
             conn.execute("SELECT 1")
         finally:
             conn.close()
+            self._cleanup_fetched()
+
+    def _cleanup_fetched(self) -> None:
+        tmp = getattr(self, "_fetched_tmp", None)
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
+            self._fetched_tmp = None
 
     def dump(self, dest_dir: Path) -> DumpResult:
         dest_dir.mkdir(parents=True, exist_ok=True)
@@ -52,6 +60,7 @@ class SqliteDumper(DbDumper):
                 dst_conn.close()
         finally:
             src_conn.close()
+            self._cleanup_fetched()
         # completeness marker sidecar
         dest.with_suffix(dest.suffix + ".done").write_text("Dump completed\n", encoding="utf-8")
         path = maybe_gzip(

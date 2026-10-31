@@ -11,6 +11,7 @@ from flask import Flask, flash, redirect, render_template, request, session, url
 
 from avidbackup.initial_full import has_completed_initial_full
 from avidbackup.paths import app_root, ensure_layout
+from avidbackup.procutil import cli_command
 from avidbackup.settings_builder import settings_from_account
 from avidbackup.store import (
     AccountConfig,
@@ -265,7 +266,7 @@ def create_app() -> Flask:
 
         def _job() -> None:
             subprocess.run(
-                [sys.executable, "-m", "avidbackup", "run", "--account", account_id],
+                cli_command("run", "--account", account_id),
                 cwd=str(app_root()),
                 check=False,
             )
@@ -278,7 +279,7 @@ def create_app() -> Flask:
     def run_all():
         def _job() -> None:
             subprocess.run(
-                [sys.executable, "-m", "avidbackup", "run"],
+                cli_command("run"),
                 cwd=str(app_root()),
                 check=False,
             )

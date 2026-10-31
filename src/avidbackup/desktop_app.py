@@ -12,6 +12,7 @@ from typing import Any
 from avidbackup.locks import acquire_app_lock
 from avidbackup.netutil import find_free_port
 from avidbackup.paths import app_root, ensure_layout
+from avidbackup.procutil import cli_command
 from avidbackup.store import load_config
 from avidbackup.webui.app import create_app
 from avidbackup.webui.security import is_loopback_host
@@ -132,7 +133,7 @@ def _try_tray(url: str, server: Any) -> bool:
         def _job() -> None:
             try:
                 subprocess.Popen(
-                    [sys.executable, "-m", "avidbackup", "run"],
+                    cli_command("run"),
                     cwd=str(app_root()),
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,

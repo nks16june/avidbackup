@@ -61,7 +61,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
 Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$action = New-ScheduledTaskAction -Execute '{app}\{#MyAppExeName}'; $trigger = New-ScheduledTaskTrigger -Daily -At 2am; Register-ScheduledTask -TaskName 'AvidBackup-Daily' -Action $action -Trigger $trigger -Force"""; \
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$action = New-ScheduledTaskAction -Execute '{app}\{#MyAppExeName}' -Argument 'run'; $trigger = New-ScheduledTaskTrigger -Daily -At 2am; Register-ScheduledTask -TaskName 'AvidBackup-Daily' -Action $action -Trigger $trigger -Force"""; \
   Tasks: scheduledtask; Flags: runhidden skipifsilent
 
 [UninstallRun]

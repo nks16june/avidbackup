@@ -62,3 +62,27 @@ def test_sqlite_gzip_round_trip(tmp_path: Path):
     check = sqlite3.connect(str(raw))
     assert check.execute("SELECT COUNT(*) FROM t").fetchone()[0] == 1
     check.close()
+
+
+def test_remote_fetch_temp_file_is_removed(tmp_path):
+    import sqlite3
+    from types import SimpleNamespace
+
+    from avidbackup.databases.sqlite import SqliteDumper
+
+    remote_db = tmp_path / "remote.sqlite"
+    c = sqlite3.connect(remote_db)
+    c.execute("create table t(x)")
+    c.commit()
+    c.close()
+
+    class FakeRemote:
+        def download_file(self, remote, dest):
+            dest.write_bytes(remote_db.read_bytes())
+
+    mysql_dir = tmp_path / "mysql"
+    settings = SimpleNamespace(local_mysql_dir=mysql_dir, compress_dumps="none")
+    db = SimpleNamespace(id="d1", path="/remote.sqlite", database="site", compress="none")
+    dumper = SqliteDumper(db, settings, remote_client=FakeRemote())
+    dumper.dump(mysql_dir)
+    assert not any(p.name.startswith(".sqlite_fetch_") for p in mysql_dir.iterdir())
