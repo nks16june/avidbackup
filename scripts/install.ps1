@@ -21,9 +21,12 @@ if (-not (Test-Path "accounts.json")) {
     & $pip -m avidbackup init
 }
 
+& (Join-Path $Root "scripts\create_desktop_shortcut.ps1")
+
 Write-Host ""
 Write-Host "Install complete."
-Write-Host "  Start UI:  .\.venv\Scripts\avidbackup.exe ui"
+Write-Host "  Desktop:   AvidBackup - Check backups"
+Write-Host "  Start UI:  .\.venv\Scripts\avidbackup.exe app"
 Write-Host "  Or run:    .\.venv\Scripts\avidbackup.exe run"
 Write-Host "  Schedule:  .\scripts\install_windows_task.ps1"
 Write-Host "  Uninstall task: Unregister-ScheduledTask -TaskName AvidBackup-Daily"

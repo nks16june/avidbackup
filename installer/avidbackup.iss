@@ -45,7 +45,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"; Flags: unchecked
+Name: "desktopicon"; Description: "Desktop shortcut: AvidBackup - Check backups"; GroupDescription: "Additional icons:"; Flags: checkedonce
 Name: "pgtools"; Description: "Download PostgreSQL backup tools (about 5 MB; only needed for PostgreSQL databases)"; GroupDescription: "Optional components:"; Flags: unchecked
 Name: "scheduledtask"; Description: "Install daily scheduled task (02:00)"; GroupDescription: "Automation:"; Flags: unchecked
 
@@ -57,7 +57,7 @@ Source: "..\docs\*"; DestDir: "{app}\docs"; Flags: ignoreversion recursesubdirs 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\AvidBackup - Check backups"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Parameters: "tools install-postgres"; StatusMsg: "Downloading PostgreSQL tools..."; Tasks: pgtools; Flags: runhidden waituntilterminated

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 
+from avidbackup.backup_report import build_report, human_bytes
 from avidbackup.initial_full import has_completed_initial_full
 from avidbackup.paths import app_root, ensure_layout
 from avidbackup.pgtools import PgToolsError, install_postgres_tools
@@ -45,6 +46,8 @@ def create_app() -> Flask:
     app = Flask(__name__, template_folder=str(TEMPLATES))
     app.secret_key = load_or_create_secret_key()
     register_security(app, ui_token=cfg0.ui_token or os.environ.get("AVIDBACKUP_UI_TOKEN", ""))
+
+    app.jinja_env.filters["human_bytes"] = human_bytes
 
     @app.context_processor
     def inject_brand():
@@ -91,6 +94,27 @@ def create_app() -> Flask:
                 }
             )
         return render_template("index.html", cfg=cfg, rows=rows)
+
+    @app.get("/backups")
+    def backups():
+        cfg = load_config()
+        try:
+            days = int(request.args.get("days", 30))
+        except ValueError:
+            days = 30
+        days = days if days in (7, 30, 90) else 30
+        account = (request.args.get("account") or "").strip()
+        if account:
+            try:
+                validate_account_id(account)
+                cfg.account(account)
+            except (KeyError, ValueError):
+                flash("Unknown account.", "bad")
+                return redirect(url_for("backups"))
+        report = build_report(cfg, days=days, account_id=account or None)
+        return render_template(
+            "backups.html", report=report, days=days, account=account, accounts=cfg.accounts
+        )
 
     @app.get("/settings")
     def global_settings():

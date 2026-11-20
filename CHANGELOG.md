@@ -18,6 +18,8 @@ All notable changes to this project will be documented in this file.
 - Windows PyInstaller spec + Inno Setup installer (CI release job)
 - Optional webhook / SMTP notifications
 - pytest + ruff + GitHub Actions CI
+- **Backups** dashboard (`/backups`): day-by-day runs and database dumps, a coverage grid that shows missed and failed days per site, 7/30/90-day and per-account filters
+- Optional on-demand PostgreSQL client tools (installer checkbox, Settings button, `avidbackup tools install-postgres`)
 
 ### Notes
 

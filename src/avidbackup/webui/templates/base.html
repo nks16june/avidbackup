@@ -76,6 +76,7 @@
     footer { margin-top: 2rem; color: var(--muted); font-size: 0.82rem; }
     .hint { font-size: 0.8rem; color: var(--muted); }
   </style>
+  {% block head %}{% endblock %}
 </head>
 <body>
   <header>
@@ -84,6 +85,7 @@
       <div class="sub">{{ vendor }} · {{ author }} · home <span class="mono">{{ home }}</span></div>
     </div>
     <nav>
+      <a class="btn" href="{{ url_for('backups') }}">Backups</a>
       <a class="btn" href="{{ url_for('index') }}">Accounts</a>
       <a class="btn" href="{{ url_for('global_settings') }}">Retention & paths</a>
       <a class="btn btn-primary" href="{{ url_for('new_account') }}">Add website</a>

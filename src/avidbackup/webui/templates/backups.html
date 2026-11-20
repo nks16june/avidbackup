@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}Backups · {{ brand }}{% endblock %}
+{% block head %}
+<style>
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.75rem; margin: 1rem 0; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 0.85rem 1rem; }
+  .stat .k { color: var(--muted); font-size: 0.8rem; }
+  .stat .v { font-size: 1.45rem; font-weight: 700; margin-top: 0.15rem; }
+  .stat .s { color: var(--muted); font-size: 0.8rem; margin-top: 0.1rem; }
+  .filters { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+  .filters select { width: auto; }
+  .seg a { padding: 0.35rem 0.7rem; }
+  .seg a.on { background: #1d4a35; border-color: var(--accent); }
+  .matrix { overflow-x: auto; padding-bottom: 0.4rem; }
+  .mrow { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem; min-width: max-content; }
+  .mlabel { width: 150px; flex: none; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cells { display: flex; gap: 3px; }
+  .cell { width: 15px; height: 22px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.62rem; line-height: 1; border: 1px solid transparent; }
+  .cell.ok { background: #1d4a35; border-color: var(--ok); color: #b7efd0; }
+  .cell.warn { background: #3a3018; border-color: var(--accent2); color: #f0dca0; }
+  .cell.fail { background: #3a1c1c; border-color: var(--bad); color: #ffc9c9; }
+  .cell.missed { background: transparent; border: 1px dashed var(--bad); color: var(--bad); }
+  .cell.running { background: #1b2f3d; border-color: #5aa0d0; color: #bfe0f5; }
+  .cell.na { background: #101b17; border-color: #1a2b26; color: #3b524a; }
+  .legend { display: flex; flex-wrap: wrap; gap: 0.9rem; font-size: 0.8rem; color: var(--muted); margin-top: 0.6rem; align-items: center; }
+  .legend .cell { width: 15px; height: 15px; vertical-align: middle; margin-right: 0.3rem; }
+  details.day { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 0.5rem; }
+  details.day > summary { cursor: pointer; padding: 0.7rem 0.9rem; display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap; list-style: none; }
+  details.day > summary::-webkit-details-marker { display: none; }
+  details.day > summary::before { content: "▸"; color: var(--muted); }
+  details.day[open] > summary::before { content: "▾"; }
+  details.day.empty > summary { cursor: default; }
+  details.day.empty > summary::before { content: "·"; }
+  .dname { font-weight: 600; min-width: 11.5rem; }
+  .pill { font-size: 0.75rem; padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid; }
+  .pill.ok { color: var(--ok); border-color: var(--ok); }
+  .pill.warn { color: var(--accent2); border-color: var(--accent2); }
+  .pill.fail, .pill.missed { color: var(--bad); border-color: var(--bad); }
+  .pill.running { color: #5aa0d0; border-color: #5aa0d0; }
+  .dsum { color: var(--muted); font-size: 0.85rem; }
+  .dbody { padding: 0 0.9rem 0.9rem; }
+  .dbody table { margin-top: 0.4rem; }
+  .dbody h3 { font-size: 0.85rem; color: var(--muted); margin: 0.8rem 0 0.2rem; font-weight: 600; }
+</style>
+{% endblock %}
+{% block body %}
+  {% set sym = {'ok': '✓', 'warn': '!', 'fail': '✕', 'missed': '○', 'running': '…', 'na': ''} %}
+  {% set word = {'ok': 'Backed up', 'warn': 'Failed once, then succeeded', 'fail': 'Failed', 'missed': 'No backup ran', 'running': 'Running', 'na': 'Before first backup'} %}
+  {% set rword = {'success': '✓ Success', 'failed': '✕ Failed', 'running': '… Running', 'interrupted': '✕ Interrupted'} %}
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap;">
+    <div>
+      <h1>Backups by day</h1>
+      <p class="muted" style="margin:0;">What was backed up, when, and which days have no backup. Times are in your local time zone.</p>
+    </div>
+    <form method="get" class="filters">
+      <select name="account" onchange="this.form.submit()" aria-label="Account">
+        <option value="">All accounts</option>
+        {% for a in accounts %}<option value="{{ a.id }}" {% if a.id == account %}selected{% endif %}>{{ a.label }}</option>{% endfor %}
+      </select>
+      <input type="hidden" name="days" value="{{ days }}">
+      <span class="seg">
+        {% for n in (7, 30, 90) %}
+          <a class="btn {% if n == days %}on{% endif %}" href="{{ url_for('backups', days=n, account=account or None) }}">{{ n }} days</a>
+        {% endfor %}
+      </span>
+    </form>
+  </div>
+
+  {% if not report.accounts %}
+    <div class="card" style="margin-top:1rem;">
+      <p>No backups to show yet.</p>
+      <a class="btn btn-primary" href="{{ url_for('new_account') }}">Add your first website</a>
+    </div>
+  {% else %}
+    <div class="stats">
+      <div class="stat">
+        <div class="k">Last successful backup</div>
+        <div class="v">{% if report.last_success %}{{ report.last_success.strftime('%d %b, %H:%M') }}{% else %}None yet{% endif %}</div>
+        <div class="s">{% if report.last_success %}{{ (report.today - report.last_success.date()).days }} day(s) ago{% else %}Run a backup to get started{% endif %}</div>
+      </div>
+      <div class="stat">
+        <div class="k">Days covered (last {{ days }})</div>
+        <div class="v {% if report.coverage_pct is not none and report.coverage_pct < 100 %}bad{% else %}ok{% endif %}">{% if report.coverage_pct is not none %}{{ report.coverage_pct }}%{% else %}–{% endif %}</div>
+        <div class="s">{{ report.covered_days }} of {{ report.expected_days }} account-days had a successful backup</div>
+      </div>
+      <div class="stat">
+        <div class="k">Failed runs (last {{ days }})</div>
+        <div class="v {% if report.failed_runs %}bad{% endif %}">{{ report.failed_runs }}</div>
+        <div class="s">{% if report.failed_runs %}See the days marked ✕ below{% else %}No failures{% endif %}</div>
+      </div>
+      <div class="stat">
+        <div class="k">Stored on this machine</div>
+        <div class="v">{{ report.total_bytes | human_bytes }}</div>
+        <div class="s">Website files + database dumps</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <strong>Coverage</strong>
+      <div class="matrix" style="margin-top:0.7rem;">
+        {% for acct in report.accounts %}
+          <div class="mrow">
+            <div class="mlabel" title="{{ acct.label }}">{{ acct.label }}</div>
+            <div class="cells">
+              {% for d in report.days %}
+                {% set st = acct.cells[d] %}
+                <span class="cell {{ st }}" title="{{ d.strftime('%a %d %b') }}: {{ word[st] }}" aria-label="{{ acct.label }}, {{ d.strftime('%d %b') }}: {{ word[st] }}">{{ sym[st] }}</span>
+              {% endfor %}
+            </div>
+          </div>
+        {% endfor %}
+        <div class="mrow">
+          <div class="mlabel"></div>
+          <div class="cells muted" style="font-size:0.72rem;justify-content:space-between;width:{{ report.days|length * 18 }}px;">
+            <span>{{ report.days[0].strftime('%d %b') }}</span><span>{{ report.days[-1].strftime('%d %b') }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="legend">
+        <span><span class="cell ok">✓</span>Backed up</span>
+        <span><span class="cell warn">!</span>Failed once, then succeeded</span>
+        <span><span class="cell fail">✕</span>Failed</span>
+        <span><span class="cell missed">○</span>No backup ran</span>
+        <span><span class="cell na"></span>Before first backup</span>
+      </div>
+    </div>
+
+    <h2>Day by day</h2>
+    {% for row in report.day_rows %}
+      {% set has = row.runs or row.dumps %}
+      <details class="day {% if not has %}empty{% endif %}" {% if has and loop.index <= 3 %}open{% endif %}>
+        <summary {% if not has %}onclick="return false"{% endif %}>
+          <span class="dname">{{ row.day.strftime('%a %d %b %Y') }}{% if row.day == report.today %} · today{% elif (report.today - row.day).days == 1 %} · yesterday{% endif %}</span>
+          {% if row.status != 'na' %}<span class="pill {{ row.status }}">{{ sym[row.status] }} {{ word[row.status] }}{% if report.accounts|length > 1 and row.status != 'ok' %}: {{ row.accounts_with(row.status)|join(', ') }}{% endif %}</span>{% endif %}
+          {% if has %}
+            <span class="dsum">{{ row.runs|length }} run{{ '' if row.runs|length == 1 else 's' }}
+              · {{ row.new_files }} new/changed file{{ '' if row.new_files == 1 else 's' }}
+              · {{ row.dumps|length }} database dump{{ '' if row.dumps|length == 1 else 's' }}
+              · {{ row.bytes_total | human_bytes }} transferred</span>
+          {% endif %}
+        </summary>
+        {% if has %}
+        <div class="dbody">
+          {% if row.runs %}
+          <table>
+            <thead><tr><th>Time</th><th>Account</th><th>Result</th><th>Files</th><th>Databases</th><th>Took</th></tr></thead>
+            <tbody>
+              {% for r in row.runs %}
+              <tr>
+                <td class="mono">{{ r.started.strftime('%H:%M:%S') }}</td>
+                <td>{{ r.label }}</td>
+                <td class="{% if r.status == 'success' %}ok{% elif r.status == 'running' %}muted{% else %}bad{% endif %}">{{ rword.get(r.status, r.status) }}{% if r.error %}<div class="mono">{{ r.error }}</div>{% endif %}</td>
+                <td>{{ r.files_new }} new/changed · {{ r.files_skipped }} unchanged{% if r.files_failed %} · <span class="bad">{{ r.files_failed }} failed</span>{% endif %}<div class="hint">{{ r.files_bytes | human_bytes }}</div></td>
+                <td>{{ r.dumps }} dump{{ '' if r.dumps == 1 else 's' }}<div class="hint">{{ r.dump_bytes | human_bytes }}</div></td>
+                <td class="muted">{% if r.duration_s is not none %}{{ r.duration_s }}s{% else %}–{% endif %}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% endif %}
+          {% if row.dumps %}
+          <h3>Database dumps saved this day</h3>
+          <table>
+            <thead><tr><th>Time</th><th>Account</th><th>File</th><th>Size</th><th>Checksum</th><th>Kept until</th></tr></thead>
+            <tbody>
+              {% for d in row.dumps %}
+              <tr>
+                <td class="mono">{{ d.created.strftime('%H:%M:%S') }}</td>
+                <td>{{ d.label }}</td>
+                <td class="mono">{{ d.name }}</td>
+                <td>{{ d.size | human_bytes }}</td>
+                <td class="{{ 'ok' if d.checksum else 'muted' }}">{{ '✓ sha256' if d.checksum else '–' }}</td>
+                <td class="muted">{{ d.kept_until.strftime('%d %b %Y') if d.kept_until else 'forever' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% endif %}
+        </div>
+        {% endif %}
+      </details>
+    {% endfor %}
+  {% endif %}
+{% endblock %}
