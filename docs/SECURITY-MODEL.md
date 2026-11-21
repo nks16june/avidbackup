@@ -35,6 +35,7 @@
 | `ui_token` in settings / `AVIDBACKUP_UI_TOKEN` | Use your own token instead of the generated one (required for non-loopback binds) |
 | `AVIDBACKUP_UI_AUTH=off` | Disable sign-in on a single-user machine. Loopback only. Not recommended |
 | `AVIDBACKUP_ALLOWED_HOSTS=nas.lan,backup.lan` | Extra Host names accepted by the Host check |
+| `AVIDBACKUP_SPAWN_MODE=auto\|direct\|task` | Windows only. How a backup is started: a detached process (default, with Task Scheduler as fallback), detached only, or always via Task Scheduler |
 
 The app opens your browser with a sign-in link automatically; you only need the token if you open the
 address by hand or from another browser.

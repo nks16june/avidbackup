@@ -14,6 +14,7 @@ All notable changes to this project will be documented in this file.
 - Phone alerts are off by default; public ntfy.sh gets generic messages unless you opt in to details
 - Removed legacy third-party notifier integrations; notifications are now generic (ntfy, webhook, email)
 - Windows: the port check no longer treats a busy port as free (`SO_REUSEADDR`)
+- Windows: starting a backup now launches a normal detached process instead of creating a Scheduled Task for every run (the task route remains a fallback; set `AVIDBACKUP_SPAWN_MODE=task` if your editor kills child processes)
 
 ## [0.1.0] — 2026-10-31
 

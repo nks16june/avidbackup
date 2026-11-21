@@ -54,3 +54,40 @@ def test_spawn_detached_survives_brief_parent(tmp_path: Path, monkeypatch):
         time.sleep(0.25)
     assert marker.exists(), "detached child did not write marker (spawn failed?)"
     assert marker.read_text(encoding="utf-8") == "ok"
+
+
+def test_windows_spawn_prefers_direct_process(monkeypatch, tmp_path: Path):
+    calls: list[str] = []
+    monkeypatch.setattr(procutil, "_spawn_windows_direct", lambda *a, **k: calls.append("direct") or 11)
+    monkeypatch.setattr(procutil, "_spawn_windows_task", lambda *a, **k: calls.append("task") or 22)
+    pid = procutil._spawn_windows(["x"], cwd=tmp_path, out_path=tmp_path / "o.log", label="a", env={})
+    assert (pid, calls) == (11, ["direct"])
+
+
+def test_windows_spawn_falls_back_to_scheduled_task(monkeypatch, tmp_path: Path):
+    def boom(*a, **k):
+        raise OSError("blocked")
+
+    monkeypatch.setattr(procutil, "_spawn_windows_direct", boom)
+    monkeypatch.setattr(procutil, "_spawn_windows_task", lambda *a, **k: 22)
+    assert procutil._spawn_windows(["x"], cwd=tmp_path, out_path=tmp_path / "o.log", label="a", env={}) == 22
+
+
+def test_windows_spawn_modes_are_respected(monkeypatch, tmp_path: Path):
+    calls: list[str] = []
+    monkeypatch.setattr(procutil, "_spawn_windows_direct", lambda *a, **k: calls.append("direct") or 11)
+    monkeypatch.setattr(procutil, "_spawn_windows_task", lambda *a, **k: calls.append("task") or 22)
+    kw = {"cwd": tmp_path, "out_path": tmp_path / "o.log", "label": "a", "env": {}}
+    assert procutil._spawn_windows(["x"], mode="task", **kw) == 22
+    monkeypatch.setenv("AVIDBACKUP_SPAWN_MODE", "task")
+    assert procutil._spawn_windows(["x"], **kw) == 22
+    assert calls == ["task", "task"]
+
+    def boom(*a, **k):
+        raise OSError("blocked")
+
+    monkeypatch.setattr(procutil, "_spawn_windows_direct", boom)
+    import pytest
+
+    with pytest.raises(OSError):
+        procutil._spawn_windows(["x"], mode="direct", **kw)  # direct never falls back

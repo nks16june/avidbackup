@@ -215,6 +215,64 @@ def _spawn_posix(argv: list[str], *, cwd: Path, out_path: Path, env: dict) -> in
     return int(proc.pid)
 
 
+_DETACHED_PROCESS = 0x00000008
+_CREATE_NEW_PROCESS_GROUP = 0x00000200
+_CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+
+
+def _spawn_windows_direct(
+    argv: list[str], *, cwd: Path, out_path: Path, env: dict[str, str]
+) -> int:
+    """Plain detached child: survives the parent, writes to the spawn log, returns its PID."""
+    base = _DETACHED_PROCESS | _CREATE_NEW_PROCESS_GROUP
+    last: OSError | None = None
+    with out_path.open("ab") as out:
+        # Leaving the parent's job object only works if the job allows it; retry without.
+        for extra in (_CREATE_BREAKAWAY_FROM_JOB, 0):
+            try:
+                proc = subprocess.Popen(  # noqa: S603
+                    argv,
+                    cwd=str(cwd),
+                    env=env,
+                    stdin=subprocess.DEVNULL,
+                    stdout=out,
+                    stderr=subprocess.STDOUT,
+                    creationflags=base | extra,
+                    close_fds=True,
+                )
+                return proc.pid
+            except OSError as exc:
+                last = exc
+    raise last or OSError("could not start the process")
+
+
+def _spawn_windows(
+    argv: list[str],
+    *,
+    cwd: Path,
+    out_path: Path,
+    label: str,
+    env: dict[str, str],
+    mode: str | None = None,
+) -> int:
+    """
+    Choose how to start a detached process on Windows.
+
+    AVIDBACKUP_SPAWN_MODE: ``auto`` (default: detached process, Scheduled Task as fallback),
+    ``direct`` (never use Task Scheduler) or ``task`` (always use Task Scheduler).
+    """
+    chosen = (mode or os.environ.get("AVIDBACKUP_SPAWN_MODE", "auto")).strip().lower()
+    if chosen == "task":
+        return _spawn_windows_task(argv, cwd=cwd, out_path=out_path, label=label)
+    try:
+        return _spawn_windows_direct(argv, cwd=cwd, out_path=out_path, env=env)
+    except OSError as exc:
+        if chosen == "direct":
+            raise
+        log.warning("Detached start failed (%s); falling back to a Scheduled Task", exc)
+        return _spawn_windows_task(argv, cwd=cwd, out_path=out_path, label=label)
+
+
 def spawn_detached(
     argv: list[str],
     *,
@@ -225,7 +283,9 @@ def spawn_detached(
     """
     Start a process that keeps running after the parent exits.
 
-    Windows: persistent Scheduled Task (survives UI/agent exit).
+    Windows: a detached process (own process group, outside the parent's job object when
+    allowed). If that cannot be started, or AVIDBACKUP_SPAWN_MODE=task, a persistent
+    Scheduled Task is used instead (needed when an editor or terminal kills child processes).
     Unix: start_new_session.
     """
     work = Path(cwd) if cwd is not None else app_root()
@@ -241,7 +301,7 @@ def spawn_detached(
         out_f.write(f"cwd: {work}\n")
 
     if sys.platform == "win32":
-        return _spawn_windows_task(argv, cwd=work, out_path=out_path, label=label)
+        return _spawn_windows(argv, cwd=work, out_path=out_path, label=label, env=env)
     return _spawn_posix(argv, cwd=work, out_path=out_path, env=env)
 
 
