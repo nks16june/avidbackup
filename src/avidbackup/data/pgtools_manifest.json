@@ -1,0 +1,90 @@
+{
+  "version": "18.6",
+  "platform": "windows-x64",
+  "url": "https://get.enterprisedb.com/postgresql/postgresql-18.6-5-windows-x64-binaries.zip",
+  "zip_size": 384620317,
+  "zip_sha256": "e2246ba91d22345bc3d017586c09ede52d9df180b1eeb480f050445f1cad84e2",
+  "source_page": "https://www.enterprisedb.com/download-postgresql-binaries",
+  "files": [
+    {
+      "name": "pg_dump.exe",
+      "zip_path": "pgsql/bin/pg_dump.exe",
+      "size": 633344,
+      "sha256": "9414dac0554065aa6edf739d7126b6e6e6d6fc3b56b9706b72cee47cee45b22c"
+    },
+    {
+      "name": "psql.exe",
+      "zip_path": "pgsql/bin/psql.exe",
+      "size": 653824,
+      "sha256": "fde952534f520909c02db04675588ecb1da8d618b6e5c93e106f42a752daf720"
+    },
+    {
+      "name": "pg_restore.exe",
+      "zip_path": "pgsql/bin/pg_restore.exe",
+      "size": 379904,
+      "sha256": "94c2b545fb870c08414dcf03cd93723f78662e1d489a0272150b40a0267f0d55"
+    },
+    {
+      "name": "libcrypto-3-x64.dll",
+      "zip_path": "pgsql/bin/libcrypto-3-x64.dll",
+      "size": 5486592,
+      "sha256": "54c0a88da398559c3daec198d7af8f020ff6fbeead38dbacd97d21ae920c3a00"
+    },
+    {
+      "name": "libiconv-2.dll",
+      "zip_path": "pgsql/bin/libiconv-2.dll",
+      "size": 1441525,
+      "sha256": "6095b3fad19fff040aeae05865c28fdeb455526fca109c3216f6ca737af60249"
+    },
+    {
+      "name": "libintl-9.dll",
+      "zip_path": "pgsql/bin/libintl-9.dll",
+      "size": 475769,
+      "sha256": "1125ac8dc0c4f5c3ed4712e0d8ad29474099fcb55bb0e563a352ce9d03ef1d78"
+    },
+    {
+      "name": "liblz4.dll",
+      "zip_path": "pgsql/bin/liblz4.dll",
+      "size": 128000,
+      "sha256": "096af775241b3bd4b1c3d79c83b103bb8f02da54ec4cd76c5d49eef61a68ad01"
+    },
+    {
+      "name": "libpq.dll",
+      "zip_path": "pgsql/bin/libpq.dll",
+      "size": 384512,
+      "sha256": "98d8e12f814ef539ded440195681c0163079dc5871d7fb278de051c2e2d4cba0"
+    },
+    {
+      "name": "libssl-3-x64.dll",
+      "zip_path": "pgsql/bin/libssl-3-x64.dll",
+      "size": 1292800,
+      "sha256": "0ac3d836a2fa84dee83bd06a4abfaf8ab7ded689420edc76febc185500e2d6e1"
+    },
+    {
+      "name": "libwinpthread-1.dll",
+      "zip_path": "pgsql/bin/libwinpthread-1.dll",
+      "size": 52736,
+      "sha256": "ffe2d56375bb4e8bdee9037df6befc5016ddd8871d0d85027314dd5792f8fdc9"
+    },
+    {
+      "name": "libzstd.dll",
+      "zip_path": "pgsql/bin/libzstd.dll",
+      "size": 727040,
+      "sha256": "287e7e474961e8886a3d961e2c07da647a7ac8d60d97023545f3a3ecf604daba"
+    }
+  ],
+  "licenses": [
+    {
+      "name": "server_license.txt",
+      "zip_path": "pgsql/server_license.txt",
+      "size": 1388,
+      "sha256": "39294f3f5b41533b307e118ee37c356f32cbc7746fc97e8b91f1b49a9068a24e"
+    },
+    {
+      "name": "commandlinetools_3rd_party_licenses.txt",
+      "zip_path": "pgsql/commandlinetools_3rd_party_licenses.txt",
+      "size": 44971,
+      "sha256": "ee3c778b2c5202a8f4733c57afacc3e025d1e0bb6be3ebe0b06f36c2f9eb202c"
+    }
+  ]
+}

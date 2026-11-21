@@ -7,8 +7,8 @@ config/known_hosts
 config/*.key
 
 # Runtime
-data/
-logs/
+/data/
+/logs/
 *.log
 .venv/
 venv/
@@ -36,7 +36,7 @@ Thumbs.db
 
 # Runtime markers and local config (app home can be the repo root in dev)
 .avidbackup_app.lock
-config/
+/config/
 
 # Scratch files (may contain real site names/paths) - never commit
 _tmp_*
