@@ -28,6 +28,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          body_path: .github/release-notes.md
       # Uncomment after configuring PyPI trusted publishing for this repo:
       # - name: Publish to PyPI
       #   uses: pypa/gh-action-pypi-publish@release/v1
@@ -85,3 +88,6 @@ jobs:
           files: |
             dist/AvidBackup-Setup-${{ steps.ver.outputs.version }}.exe
             dist/AvidBackup-Setup-${{ steps.ver.outputs.version }}.exe.sha256
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          body_path: .github/release-notes.md
