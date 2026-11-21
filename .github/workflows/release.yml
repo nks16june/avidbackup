@@ -25,7 +25,7 @@ jobs:
           name: python-dist
           path: dist/*
       - name: GitHub Release (Python packages)
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/*
           prerelease: ${{ contains(github.ref_name, '-') }}
@@ -83,7 +83,7 @@ jobs:
       #     github-artifact-id: <set when using artifact upload>
       #     wait-for-completion: true
       - name: Attach Windows installer to release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/AvidBackup-Setup-${{ steps.ver.outputs.version }}.exe
