@@ -69,7 +69,10 @@ jobs:
       - name: SHA256
         shell: bash
         run: |
-          SETUP="dist/AvidBackup-Setup-${{ steps.ver.outputs.version }}.exe"
+          # Hash from inside dist/ so the .sha256 file holds a bare file name and
+          # `sha256sum -c AvidBackup-Setup-*.exe.sha256` works next to the download.
+          cd dist
+          SETUP="AvidBackup-Setup-${{ steps.ver.outputs.version }}.exe"
           sha256sum "$SETUP" | tee "${SETUP}.sha256"
       # Optional SignPath code signing (configure org secrets, then uncomment):
       # - name: Sign with SignPath

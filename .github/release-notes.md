@@ -3,7 +3,7 @@
 **Windows:** download `AvidBackup-Setup-*.exe` below and run it. No Python needed.
 The installer is not code-signed yet, so Windows SmartScreen may say "unrecognized app":
 choose **More info, then Run anyway**. To verify the download, compare its SHA256 with the
-`.sha256` file (`certutil -hashfile AvidBackup-Setup-*.exe SHA256` in a terminal).
+`.sha256` file: `certutil -hashfile AvidBackup-Setup-*.exe SHA256` on Windows, or `sha256sum -c AvidBackup-Setup-*.exe.sha256` (Git Bash, Linux, macOS) from the download folder.
 
 **Linux / macOS / any OS with Python 3.10+:**
 

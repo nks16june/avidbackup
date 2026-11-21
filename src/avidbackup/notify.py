@@ -26,18 +26,41 @@ def send_success(cfg: AppConfig, message: str) -> bool:
     return send_status(cfg, "AvidBackup", message, urgent=False)
 
 
-def send_status(cfg: AppConfig, title: str, message: str, *, urgent: bool) -> bool:
-    """Phone (ntfy, opt-in), plus optional webhook and email."""
-    ok = False
+def channels_configured(cfg: AppConfig) -> list[str]:
+    """Names of the notification channels the user has set up (empty by default)."""
     n = cfg.notify
+    channels: list[str] = []
     if n.phone_enabled and n.ntfy_topic:
-        ok = _ntfy(n, title, message, urgent=urgent) or ok
+        channels.append("phone")
     if n.webhook_url:
-        ok = _webhook(n, message) or ok
+        channels.append("webhook")
     if n.smtp_host and n.smtp_to and n.smtp_from:
+        channels.append("email")
+    return channels
+
+
+def send_status(cfg: AppConfig, title: str, message: str, *, urgent: bool) -> bool:
+    """
+    Phone (ntfy, opt-in), plus optional webhook and email.
+
+    Returns True when at least one channel accepted the message. With no channel set up
+    nothing is sent and nothing is logged as a problem; a warning is only logged when a
+    channel was configured and every configured channel failed.
+    """
+    channels = channels_configured(cfg)
+    if not channels:
+        log.debug("No notification channel configured; nothing to send")
+        return False
+    n = cfg.notify
+    ok = False
+    if "phone" in channels:
+        ok = _ntfy(n, title, message, urgent=urgent) or ok
+    if "webhook" in channels:
+        ok = _webhook(n, message) or ok
+    if "email" in channels:
         ok = _smtp(n, title, message) or ok
     if not ok:
-        log.warning("No notification channel accepted the status")
+        log.warning("Notification failed on every configured channel: %s", ", ".join(channels))
     return ok
 
 

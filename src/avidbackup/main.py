@@ -15,7 +15,7 @@ from avidbackup.history import HistoryStore
 from avidbackup.initial_full import has_completed_initial_full, mark_initial_full_done
 from avidbackup.locks import acquire_run_lock
 from avidbackup.logging_setup import setup_logging
-from avidbackup.notify import ensure_phone_config, send_status
+from avidbackup.notify import channels_configured, ensure_phone_config, send_status
 from avidbackup.paths import app_root, ensure_layout
 from avidbackup.remote import connect
 from avidbackup.retention import prune_mysql_dumps
@@ -569,12 +569,15 @@ def _send_digest(cfg, account_ids: list[str] | None = None) -> bool:
         print(f"Could not build the phone status: {exc}", file=sys.stderr)
         return False
     print(message)
+    if not channels_configured(cfg):
+        print("No notification channel is set up, so no status message was sent.")
+        return True
     try:
         sent = send_status(cfg, title, message, urgent=urgent)
     except Exception as exc:  # noqa: BLE001
         print(f"Could not send the phone status: {exc}", file=sys.stderr)
         return False
-    print("Phone status sent." if sent else "Phone status was not delivered.")
+    print("Notification sent." if sent else "Notification was not delivered.")
     return sent
 
 
@@ -597,12 +600,15 @@ def cmd_digest(args: argparse.Namespace) -> int:
     ensure_phone_config(cfg)
     title, message, urgent = build_digest(cfg)
     print(message)
+    if not channels_configured(cfg):
+        print("No notification channel is set up, so no status message was sent.")
+        return 1 if urgent else 0
     sent = False
     try:
         sent = send_status(cfg, title, message, urgent=urgent)
     except Exception as exc:  # noqa: BLE001
         print(f"Could not send the phone status: {exc}", file=sys.stderr)
-    print("Phone status sent." if sent else "Phone status was not delivered.")
+    print("Notification sent." if sent else "Notification was not delivered.")
     return 0 if sent else 1
 
 

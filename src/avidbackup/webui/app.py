@@ -809,13 +809,20 @@ def create_app(*, bind_host: str | None = None) -> Flask:
 
     @app.post("/settings/test-phone")
     def test_phone():
-        from avidbackup.notify import ensure_phone_config, send_status
+        from avidbackup.notify import channels_configured, ensure_phone_config, send_status
 
         cfg = load_config()
         cfg.notify.phone_enabled = request.form.get("phone_enabled") == "on"
         cfg.notify.ntfy_details = request.form.get("ntfy_details") == "on"
         save_config(cfg)
         cfg = ensure_phone_config(cfg)
+        if not channels_configured(cfg):
+            flash(
+                "No notification channel is turned on. Tick the phone option (or add a webhook "
+                "or email) and try again.",
+                "bad",
+            )
+            return redirect(url_for("global_settings"))
         ok = send_status(
             cfg,
             "AvidBackup test",
@@ -823,7 +830,7 @@ def create_app(*, bind_host: str | None = None) -> Flask:
             urgent=False,
         )
         flash(
-            "Test sent. Check ntfy on your phone." if ok else "The test could not be delivered. See the log.",
+            "Test sent." if ok else "The test could not be delivered. See the log.",
             "ok" if ok else "bad",
         )
         return redirect(url_for("global_settings"))
