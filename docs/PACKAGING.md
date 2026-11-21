@@ -74,14 +74,10 @@ Point `InstallerUrl` / `url` at the GitHub Release asset, paste the real SHA256,
 
 Until then use pipx, Docker, or source install on those platforms.
 
-## Screenshot checklist (`docs/images/`)
+## Screenshots (`docs/images/`)
 
-| File | Capture |
-|---|---|
-| `ui-dashboard.png` | Accounts list / home |
-| `ui-add-site.png` | Add website form |
-| `ui-progress.png` | Backup / transfer progress |
-| `ui-settings.png` | Global settings / UI token |
-| `cli-doctor.png` | `avidbackup doctor` |
-
-Keep hostnames and passwords out of screenshots.
+The README images are taken from a throwaway demo home folder with fake `example.com` sites
+(no real hostnames, passwords or personal paths). To refresh them, seed a demo home, start
+`avidbackup ui` against it, and capture `/`, `/backups`, a restore day, the restore confirmation
+and `/accounts/new`. `social-preview.png` (1280x640) is the image GitHub shows when the repo
+is shared. Keep real hostnames, passwords and local paths out of every screenshot.

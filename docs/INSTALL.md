@@ -22,11 +22,11 @@ avidbackup agent status
 ## pipx / pip (developer path)
 
 ```bash
-pipx install avidbackup
+pipx install git+https://github.com/nks16june/avidbackup.git
 avidbackup app                 # UI + browser; tray with: pipx inject avidbackup 'avidbackup[desktop]'
 ```
 
-Or: `pip install avidbackup` / from clone `pip install -e ".[dev,desktop]"`.
+Or from a clone: `pip install -e ".[dev,desktop]"`. (A PyPI release, `pipx install avidbackup`, is planned.)
 
 ## Docker (NAS / VPS)
 

@@ -15,7 +15,10 @@ authors = [
 maintainers = [
   { name = "Avid Web Solutions", email = "nishant@avidwebsolutions.in" },
 ]
-keywords = ["backup", "ftp", "ftps", "sftp", "mysql", "postgres", "sqlite", "hosting"]
+keywords = [
+  "backup", "website-backup", "incremental-backup", "ftp", "ftps", "sftp", "mysql", "mariadb",
+  "postgres", "sqlite", "hosting", "self-hosted", "wordpress", "restore", "local-first",
+]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Environment :: Console",
