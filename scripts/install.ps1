@@ -22,12 +22,13 @@ if (-not (Test-Path "accounts.json")) {
 }
 
 & (Join-Path $Root "scripts\create_desktop_shortcut.ps1")
+& (Join-Path $Root "scripts\install_windows_task.ps1")
+& (Join-Path $Root "scripts\install_agent.ps1")
 
 Write-Host ""
-Write-Host "Install complete."
-Write-Host "  Desktop:   AvidBackup - Check backups"
-Write-Host "  Start UI:  .\.venv\Scripts\avidbackup.exe app"
-Write-Host "  Or run:    .\.venv\Scripts\avidbackup.exe run"
-Write-Host "  Schedule:  .\scripts\install_windows_task.ps1"
-Write-Host "  Uninstall task: Unregister-ScheduledTask -TaskName AvidBackup-Daily"
+Write-Host "Install complete — AvidBackup agent is installed to keep running at logon."
+Write-Host "  Desktop:   AvidBackup - Check backups  (opens UI; agent stays up)"
+Write-Host "  Agent:     .\.venv\Scripts\avidbackup.exe agent status"
+Write-Host "  Open UI:   .\.venv\Scripts\avidbackup.exe agent open"
+Write-Host "  Run now:   .\.venv\Scripts\avidbackup.exe run"
 Write-Host "  Docs:      docs\INSTALL.md"

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Confirm restore · {{ brand }}{% endblock %}
+{% block body %}
+  <h1>Confirm restore to your server</h1>
+  <p class="muted">Nothing has been sent yet. Review this, then confirm.</p>
+
+  <div class="card" style="max-width:720px;">
+    <table style="width:100%;">
+      <tr><td class="muted" style="width:9rem;">Site</td><td><strong>{{ account.label }}</strong> <span class="mono">{{ account.id }}</span></td></tr>
+      <tr><td class="muted">Snapshot day</td><td>{{ day }}</td></tr>
+      <tr><td class="muted">Scope</td><td>{% if rel %}<code>{{ rel }}</code>{% else %}Whole day (all files){% endif %}</td></tr>
+      <tr><td class="muted">Will upload</td><td><strong>{{ plan.files | human_int }}{% if plan.truncated %}+{% endif %} file(s)</strong>, {{ plan.bytes | human_bytes }}</td></tr>
+      <tr><td class="muted">To</td><td class="mono">{{ account.ftp.protocol }}://{{ account.ftp.user }}@{{ account.ftp.host }}:{{ account.ftp.port }}</td></tr>
+    </table>
+
+    {% if plan.sample %}
+      <p class="muted" style="margin:0.9rem 0 0.3rem;">Examples of server paths that will be written (relative to the FTP login's home folder):</p>
+      <ul class="mono" style="margin:0 0 0.5rem 1rem;padding:0;">
+        {% for path in plan.sample %}<li>{{ path }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+
+    <div class="flash bad" style="margin:1rem 0;">
+      Files that already exist on the server at the same path <strong>will be overwritten</strong> with the snapshot version.
+      Nothing is deleted. This cannot be undone from AvidBackup. If the live site is working, take a fresh backup first.
+    </div>
+
+    <form method="post" action="{{ url_for('restore_ftp_day', account_id=account.id, day=day) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="plan_id" value="{{ plan_id }}">
+      <input type="hidden" name="path" value="{{ rel }}">
+      <label for="confirm">Type the site ID <code>{{ account.id }}</code> to confirm</label>
+      <input id="confirm" name="confirm" autocomplete="off" required placeholder="{{ account.id }}">
+      <p class="hint">This preview is valid for {{ minutes }} minutes and can be used once.</p>
+      <p style="margin-top:1rem;">
+        <button class="btn btn-danger" type="submit">Upload to server</button>
+        <a class="btn" href="{{ url_for('restore_day', account_id=account.id, day=day, tab='files', path=rel or None) }}">Cancel</a>
+      </p>
+    </form>
+  </div>
+{% endblock %}

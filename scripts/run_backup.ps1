@@ -22,7 +22,7 @@ $Python = if (Test-Path $VenvPython) { $VenvPython } else { "python" }
 # Default to "run" when no subcommand is passed
 if ($BackupArgs.Count -eq 0) {
     $BackupArgs = @("run")
-} elseif ($BackupArgs[0] -notmatch '^(run|list|init|ui|verify|doctor|restore-db)$' -and $BackupArgs[0] -notlike '-*') {
+} elseif ($BackupArgs[0] -notmatch '^(run|list|init|ui|verify|doctor|restore-db|digest|snapshot|tools)$' -and $BackupArgs[0] -notlike '-*') {
     $BackupArgs = @("run") + $BackupArgs
 } elseif ($BackupArgs[0] -like '--*') {
     $BackupArgs = @("run") + $BackupArgs

@@ -47,6 +47,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Desktop shortcut: AvidBackup - Check backups"; GroupDescription: "Additional icons:"; Flags: checkedonce
 Name: "pgtools"; Description: "Download PostgreSQL backup tools (about 5 MB; only needed for PostgreSQL databases)"; GroupDescription: "Optional components:"; Flags: unchecked
+Name: "agenttask"; Description: "Keep AvidBackup agent running at Windows logon (recommended)"; GroupDescription: "Automation:"; Flags: checkedonce
 Name: "scheduledtask"; Description: "Install daily scheduled task (02:00)"; GroupDescription: "Automation:"; Flags: unchecked
 
 [Files]
@@ -61,14 +62,16 @@ Name: "{autodesktop}\AvidBackup - Check backups"; Filename: "{app}\{#MyAppExeNam
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Parameters: "tools install-postgres"; StatusMsg: "Downloading PostgreSQL tools..."; Tasks: pgtools; Flags: runhidden waituntilterminated
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Parameters: "agent install"; Description: "Install always-on agent"; StatusMsg: "Installing AvidBackup agent..."; Tasks: agenttask; Flags: runhidden waituntilterminated
+Filename: "{app}\{#MyAppExeName}"; Parameters: "agent open"; Description: "Open {#MyAppName}"; Flags: nowait postinstall skipifsilent
 Filename: "powershell.exe"; \
   Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""$action = New-ScheduledTaskAction -Execute '{app}\{#MyAppExeName}' -Argument 'run'; $trigger = New-ScheduledTaskTrigger -Daily -At 2am; Register-ScheduledTask -TaskName 'AvidBackup-Daily' -Action $action -Trigger $trigger -Force"""; \
   Tasks: scheduledtask; Flags: runhidden skipifsilent
 
 [UninstallRun]
+Filename: "{app}\{#MyAppExeName}"; Parameters: "agent uninstall"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveAvidBackupAgent"
 Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Unregister-ScheduledTask -TaskName 'AvidBackup-Daily' -Confirm:$false -ErrorAction SilentlyContinue"""; \
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -Command ""Unregister-ScheduledTask -TaskName 'AvidBackup-Daily' -Confirm:$false -ErrorAction SilentlyContinue; Unregister-ScheduledTask -TaskName 'AvidBackup\Agent' -Confirm:$false -ErrorAction SilentlyContinue"""; \
   Flags: runhidden; RunOnceId: "RemoveAvidBackupTask"
 
 [UninstallDelete]

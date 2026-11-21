@@ -13,20 +13,26 @@ def settings_from_account(cfg: AppConfig, account: AccountConfig) -> Settings:
     ftp = account.ftp
     account_root = resolve_data_dir(cfg, account)
     password = resolve_secret(ftp.password, ftp.password_env)
+    from avidbackup.remote import normalize_access_protocol
+
+    transport = normalize_access_protocol(ftp.protocol or "ftps")
+    default_port = 22 if transport == "sftp" else 21
     settings = Settings(
-        protocol=(ftp.protocol or "ftps").lower(),
+        protocol=transport,  # ssh → sftp for the client
         host=ftp.host,
-        port=int(ftp.port or 21),
+        port=int(ftp.port or default_port),
         user=ftp.user,
         password=password,
         tls_explicit=bool(ftp.tls_explicit),
         passive=bool(ftp.passive),
-        remote_files_root=(ftp.remote_root or "/public_html").rstrip("/") or "/",
+        remote_files_root=(ftp.remote_root or "/").rstrip("/") or "/",
         local_backup_root=account_root,
         local_files_dir=account_root / "files",
         local_mysql_dir=account_root / "mysql",
         incremental=True,
         prune_local=False,
+        # Exact path-segment names only (see sync_files._should_skip). Never list
+        # app / upload / uploads / storage / public_html — those stay in backup.
         skip_paths=["cache", "tmp", "temp", ".git", "node_modules"],
         site_url=account.site_url or f"https://{account.domain or account.id}",
         mysql_host="",
@@ -40,6 +46,32 @@ def settings_from_account(cfg: AppConfig, account: AccountConfig) -> Settings:
         host_key_policy=(ftp.host_key_policy or "tofu").lower(),
         mysql_ssl=False,
     )
+    # Whole-account home `/`: skip cPanel system dirs. Dot-folders (.cpanel,
+    # .trash, …) are skipped in sync_files._should_skip; keep app/upload/storage.
+    if settings.remote_files_root in {"/", ""}:
+        settings.skip_paths = list(
+            dict.fromkeys(
+                [
+                    *settings.skip_paths,
+                    "mail",
+                    "etc",
+                    "ssl",
+                    "access-logs",
+                    "cgi-bin",
+                    "tmp",
+                    "temp",
+                    "cache",
+                ]
+            )
+        )
+        # Prefer account-home env files for MySQL discovery (often above public_html).
+        settings.mysql_config_candidates = [
+            ".env",
+            ".env_local",
+            ".env.local",
+            ".env.production",
+            *settings.mysql_config_candidates,
+        ]
     settings.manifest_path = account_root / ".manifest.json"
     settings.history_db = account_root / "history.sqlite3"
     settings.log_dir = logs_dir()

@@ -4,7 +4,17 @@
 
 ## Website files
 
-Local archive: `data/{account-id}/files/`
+Each day has its own copy:
+
+`data/{account-id}/YYYY-MM-DD/files/`
+
+The database dump for that same day is next to it:
+
+`data/{account-id}/YYYY-MM-DD/db/`
+
+Unchanged files are hard-linked, so a day folder does not use a full extra copy of the site. Open the day you want and restore from `files` or `db` on its own.
+
+Older backups that pre-date day folders are still in `data/{account-id}/files/` and `data/{account-id}/mysql/`.
 
 Re-upload with your FTP/SFTP client, or:
 

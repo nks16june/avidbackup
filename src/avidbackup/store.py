@@ -33,7 +33,7 @@ class FtpConfig:
     password_env: str = ""
     tls_explicit: bool = True
     passive: bool = True
-    remote_root: str = "/public_html"
+    remote_root: str = "/"  # whole FTP/cPanel account home (not only public_html)
     verify_tls: bool = True
     host_key_policy: str = "tofu"  # tofu | strict | insecure
 
@@ -76,6 +76,13 @@ class NotifyConfig:
     smtp_from: str = ""
     smtp_to: str = ""
     smtp_tls: bool = True
+    # Off by default: phone alerts go through a third-party server (ntfy.sh unless you
+    # point ntfy_server at your own). Opt in under Settings.
+    phone_enabled: bool = False
+    ntfy_server: str = "https://ntfy.sh"
+    ntfy_topic: str = ""
+    # Public ntfy.sh only gets a generic message unless this is on.
+    ntfy_details: bool = False
 
 
 @dataclass
@@ -133,7 +140,7 @@ def _ftp_from(raw: dict[str, Any] | None) -> FtpConfig:
         password_env=str(raw.get("password_env") or ""),
         tls_explicit=bool(raw.get("tls_explicit", True)),
         passive=bool(raw.get("passive", True)),
-        remote_root=str(raw.get("remote_root") or "/public_html"),
+        remote_root=str(raw.get("remote_root") or "/"),
         verify_tls=bool(raw.get("verify_tls", True)),
         host_key_policy=str(raw.get("host_key_policy") or "tofu").lower(),
     )
@@ -184,6 +191,10 @@ def _notify_from(raw: dict[str, Any] | None) -> NotifyConfig:
         smtp_from=str(raw.get("smtp_from") or ""),
         smtp_to=str(raw.get("smtp_to") or ""),
         smtp_tls=bool(raw.get("smtp_tls", True)),
+        phone_enabled=bool(raw.get("phone_enabled", False)),
+        ntfy_server=str(raw.get("ntfy_server") or "https://ntfy.sh").rstrip("/"),
+        ntfy_topic=str(raw.get("ntfy_topic") or ""),
+        ntfy_details=bool(raw.get("ntfy_details", False)),
     )
 
 

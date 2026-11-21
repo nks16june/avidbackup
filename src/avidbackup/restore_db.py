@@ -16,20 +16,16 @@ log = logging.getLogger(__name__)
 
 
 def newest_dump(mysql_dir: Path, database: str) -> Path | None:
+    from avidbackup.backup_report import list_dump_files
+
     stem = (database or "").strip()
     if not stem:
         return None
-    patterns = [
-        f"{stem}_*.sql",
-        f"{stem}_*.sql.gz",
-        f"{stem}_*.dump",
-        f"{stem}_*.dump.gz",
-        f"{stem}_*.sqlite",
-        f"{stem}_*.sqlite.gz",
+    found = [
+        path
+        for path in list_dump_files(mysql_dir)
+        if path.name.startswith(f"{stem}_") or path.name.startswith(f"{stem}.")
     ]
-    found: list[Path] = []
-    for pat in patterns:
-        found.extend(p for p in mysql_dir.glob(pat) if p.is_file())
     if not found:
         return None
     return max(found, key=lambda p: p.stat().st_mtime)

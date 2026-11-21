@@ -44,7 +44,7 @@ Single supported config file (created by `avidbackup init` or the UI).
         "password_env": "EXAMPLE_FTP_PASS",
         "tls_explicit": true,
         "passive": true,
-        "remote_root": "/public_html",
+        "remote_root": "/",
         "verify_tls": true,
         "host_key_policy": "tofu"
       },

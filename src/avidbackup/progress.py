@@ -25,6 +25,7 @@ class TransferStatus:
     started_at: float = 0.0
     updated_at: float = 0.0
     scanned: int = 0
+    folders_scanned: int = 0
     queued: int = 0
     downloaded: int = 0
     failed: int = 0
@@ -32,6 +33,7 @@ class TransferStatus:
     retries: int = 0
     bytes_done: int = 0
     bytes_total: int = 0
+    current_folder: str = ""
     current_path: str = ""
     current_size: int = 0
     current_transferred: int = 0
@@ -40,6 +42,8 @@ class TransferStatus:
     speed_bps: float = 0.0
     eta_seconds: float | None = None
     recent: list[dict[str, Any]] = field(default_factory=list)
+    # Rolling samples for the live UI sparkline (client can also append from polls).
+    samples: list[dict[str, Any]] = field(default_factory=list)
 
 
 class ProgressReporter:
@@ -74,11 +78,38 @@ class ProgressReporter:
         if elapsed > 1.5:
             self._speed_t0 = now
             self._speed_b0 = self.status.bytes_done + self.status.current_transferred
+        # Keep a short throughput history for the graphical live console (~1 Hz).
+        last_sample_t = self.status.samples[-1]["t"] if self.status.samples else 0.0
+        if (now - float(last_sample_t)) >= 0.9:
+            self.status.samples.append(
+                {
+                    "t": round(now, 2),
+                    "bytes": int(self.status.bytes_done + self.status.current_transferred),
+                    "bps": round(float(self.status.speed_bps or 0.0), 1),
+                    "downloaded": int(self.status.downloaded),
+                    "scanned": int(self.status.scanned),
+                }
+            )
+            self.status.samples = self.status.samples[-90:]
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")
         payload = asdict(self.status)
-        tmp.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(self.path)
+        body = json.dumps(payload, ensure_ascii=False)
+        # Windows often denies replace while the UI is reading the status file —
+        # never crash the backup over a live-status write.
+        for attempt in range(8):
+            try:
+                tmp.write_text(body, encoding="utf-8")
+                tmp.replace(self.path)
+                break
+            except OSError:
+                if attempt >= 7:
+                    try:
+                        self.path.write_text(body, encoding="utf-8")
+                    except OSError:
+                        return
+                    break
+                time.sleep(0.05 * (attempt + 1))
         self._last_write = now
 
     def set_phase(self, phase: str, message: str = "") -> None:
@@ -86,10 +117,33 @@ class ProgressReporter:
         self.status.message = message
         self._write(force=True)
 
-    def set_scan(self, scanned: int) -> None:
+    def set_scan(
+        self,
+        scanned: int,
+        *,
+        folder: str = "",
+        folders_scanned: int | None = None,
+        skipped: int | None = None,
+        queued: int | None = None,
+    ) -> None:
         self.status.scanned = scanned
+        if folder:
+            self.status.current_folder = folder
+        if folders_scanned is not None:
+            self.status.folders_scanned = folders_scanned
+        if skipped is not None:
+            self.status.skipped = skipped
+        if queued is not None:
+            self.status.queued = queued
         self.status.phase = "scanning"
-        self.status.message = f"Scanning remote tree… {scanned} entries"
+        folder_bit = f" · {folder}" if folder else ""
+        folders_bit = (
+            f"{self.status.folders_scanned} folder(s), "
+            if self.status.folders_scanned
+            else ""
+        )
+        skip_bit = f", {self.status.skipped} unchanged" if self.status.skipped else ""
+        self.status.message = f"Scanning {folders_bit}{scanned} file(s){skip_bit}{folder_bit}"
         self._write()
 
     def set_queue(self, items: list[QueueItem]) -> None:

@@ -1,0 +1,830 @@
+{% extends "base.html" %}
+{% block title %}{{ account.label }} · Live · {{ brand }}{% endblock %}
+{% block page_title %}{{ account.label }}{% endblock %}
+{% block page_subtitle %}
+  <p class="hint">Live transfer console · {{ account.id }} · refreshes every second while active</p>
+{% endblock %}
+{% block top_actions %}
+  <a class="btn" href="{{ url_for('index') }}">← Sites</a>
+  <a class="btn" href="{{ url_for('backups', account=account.id) }}">Calendar</a>
+  <a class="btn" href="{{ url_for('edit_account', account_id=account.id) }}">Edit</a>
+  <form method="post" action="{{ url_for('open_folder', account_id=account.id) }}" style="margin:0">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="next" value="live">
+    <button class="btn" type="submit">Open folder</button>
+  </form>
+  <form method="post" action="{{ url_for('run_backup', account_id=account.id) }}" style="margin:0">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn btn-primary" type="submit" id="btn-run" title="Continues where left off — unchanged files are skipped">Resume / Backup</button>
+  </form>
+{% endblock %}
+{% block head %}
+<style>
+  .live-shell {
+    display: grid;
+    grid-template-columns: minmax(260px, 320px) 1fr;
+    gap: 1rem;
+    align-items: start;
+  }
+  @media (max-width: 920px) {
+    .live-shell { grid-template-columns: 1fr; }
+  }
+  .console {
+    --ink: #d7e6ff;
+    --ink-dim: #8aa0c0;
+    --pane: #0c1524;
+    --pane-2: #132033;
+    --line-d: rgba(120, 160, 220, 0.18);
+    --glow: #3d8bfd;
+    --good: #3dd68c;
+    --warn-c: #f0b429;
+    --bad-c: #f07178;
+    background:
+      radial-gradient(1200px 400px at 10% -10%, rgba(61,139,253,0.18), transparent 55%),
+      radial-gradient(800px 320px at 90% 0%, rgba(61,214,140,0.08), transparent 50%),
+      linear-gradient(165deg, #0a1220 0%, var(--pane) 45%, #0e1a2c 100%);
+    color: var(--ink);
+    border: 1px solid #1c2d48;
+    border-radius: 14px;
+    padding: 1.15rem 1.2rem 1.25rem;
+    box-shadow: 0 18px 40px rgba(8, 14, 28, 0.35), inset 0 1px 0 rgba(255,255,255,0.04);
+    position: relative;
+    overflow: hidden;
+  }
+  .console::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image: linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 100% 4px;
+    pointer-events: none;
+    opacity: 0.35;
+  }
+  .console > * { position: relative; z-index: 1; }
+  .phase-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .phase-badge {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    font-weight: 700; font-size: 0.82rem; letter-spacing: 0.04em;
+    text-transform: uppercase; padding: 0.35rem 0.7rem;
+    border-radius: 999px; border: 1px solid var(--line-d);
+    background: rgba(255,255,255,0.04);
+  }
+  .phase-badge .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--ink-dim);
+  }
+  .phase-badge.live .dot { background: var(--glow); box-shadow: 0 0 0 4px rgba(61,139,253,0.25); animation: blink 1.1s ease-in-out infinite; }
+  .phase-badge.ok .dot { background: var(--good); }
+  .phase-badge.bad .dot { background: var(--bad-c); }
+  .phase-badge.stale .dot { background: var(--warn-c); }
+  @keyframes blink { 50% { opacity: 0.35; } }
+  .phase-msg { color: var(--ink-dim); font-size: 0.86rem; text-align: right; max-width: 55%; }
+  .ring-wrap {
+    display: grid; place-items: center;
+    margin: 0.25rem auto 1rem;
+    width: 210px; height: 210px;
+    position: relative;
+  }
+  .ring-wrap svg { width: 210px; height: 210px; transform: rotate(-90deg); }
+  .ring-track { fill: none; stroke: rgba(255,255,255,0.08); stroke-width: 12; }
+  .ring-prog {
+    fill: none; stroke: url(#ringGrad); stroke-width: 12;
+    stroke-linecap: round;
+    stroke-dasharray: 565.48;
+    stroke-dashoffset: 565.48;
+    transition: stroke-dashoffset 0.45s ease;
+    filter: drop-shadow(0 0 6px rgba(61,139,253,0.45));
+  }
+  .ring-center {
+    position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+    pointer-events: none;
+  }
+  .ring-pct { font-size: 2.35rem; font-weight: 700; letter-spacing: -0.04em; line-height: 1; }
+  .ring-sub { color: var(--ink-dim); font-size: 0.78rem; margin-top: 0.35rem; }
+  .scan-pulse {
+    position: absolute; inset: 28px; border-radius: 50%;
+    border: 1px solid rgba(61,139,253,0.35);
+    animation: radar 2.2s ease-out infinite;
+    opacity: 0; pointer-events: none;
+  }
+  .scan-pulse:nth-child(2) { animation-delay: 0.7s; }
+  .scan-pulse:nth-child(3) { animation-delay: 1.4s; }
+  @keyframes radar {
+    0% { transform: scale(0.55); opacity: 0.55; }
+    100% { transform: scale(1.15); opacity: 0; }
+  }
+  .ring-wrap.scanning .scan-pulse { display: block; }
+  .ring-wrap:not(.scanning) .scan-pulse { display: none; }
+  .stat-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem;
+  }
+  .stat {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--line-d);
+    border-radius: 10px;
+    padding: 0.55rem 0.7rem;
+  }
+  .stat .k { color: var(--ink-dim); font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .stat .v { font-size: 1.15rem; font-weight: 700; margin-top: 0.15rem; font-variant-numeric: tabular-nums; }
+  .stat .v.good { color: var(--good); }
+  .stat .v.bad { color: var(--bad-c); }
+  .right-col { display: flex; flex-direction: column; gap: 0.85rem; min-width: 0; }
+  .panel-lite {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 0.95rem 1.05rem;
+  }
+  .panel-lite h2 {
+    margin: 0 0 0.65rem; font-size: 0.92rem; font-weight: 700;
+    display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem;
+  }
+  .panel-lite h2 span { color: var(--muted); font-weight: 600; font-size: 0.78rem; }
+  .current-file {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.8rem;
+    color: var(--text);
+    word-break: break-all;
+    min-height: 2.4em;
+    margin-bottom: 0.55rem;
+  }
+  .bar {
+    height: 10px; border-radius: 999px; background: #e2e8f0; overflow: hidden;
+    position: relative;
+  }
+  .bar > i {
+    display: block; height: 100%; width: 0%;
+    background: linear-gradient(90deg, #1f6feb, #3d8bfd 55%, #5eead4);
+    border-radius: inherit;
+    transition: width 0.35s ease;
+    position: relative;
+  }
+  .bar.live > i::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+    animation: sheen 1.6s linear infinite;
+  }
+  @keyframes sheen { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+  .bar-meta {
+    display: flex; justify-content: space-between; gap: 0.5rem;
+    margin-top: 0.4rem; font-size: 0.78rem; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .spark-wrap { height: 96px; position: relative; }
+  .spark-wrap canvas { width: 100%; height: 96px; display: block; }
+  .spark-empty {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    color: var(--muted); font-size: 0.85rem;
+  }
+  .file-stream {
+    max-height: 340px; overflow: auto;
+    border: 1px solid var(--line); border-radius: 10px;
+  }
+  .file-row {
+    display: grid; grid-template-columns: 72px 1fr auto;
+    gap: 0.55rem; align-items: center;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.84rem;
+  }
+  .file-row:last-child { border-bottom: 0; }
+  .file-row.active {
+    background: linear-gradient(90deg, rgba(31,111,235,0.08), transparent 70%);
+  }
+  .file-row .path {
+    font-family: "IBM Plex Mono", monospace; font-size: 0.74rem;
+    color: var(--muted); word-break: break-all;
+  }
+  .chip {
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.04em; padding: 0.2rem 0.45rem; border-radius: 6px;
+    border: 1px solid;
+  }
+  .chip.queued { color: var(--muted); background: #eef2f7; border-color: var(--line); }
+  .chip.transferring { color: var(--run); background: var(--run-bg); border-color: #b5d4f6; }
+  .chip.done { color: var(--ok); background: var(--ok-bg); border-color: #b7e4c7; }
+  .chip.failed { color: var(--bad); background: var(--bad-bg); border-color: #f0b6b0; }
+  .chip.skipped { color: var(--warn); background: var(--warn-bg); border-color: #f0d78c; }
+  .stat-lite {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 0.45rem 0.55rem;
+  }
+  .stat-lite .k { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .stat-lite .v { font-weight: 700; font-size: 1.05rem; margin-top: 0.1rem; }
+  .report-block { margin: 0.35rem 0; border: 1px solid var(--line); border-radius: 8px; padding: 0.35rem 0.55rem; background: var(--panel-2); }
+  .report-block summary { cursor: pointer; font-weight: 700; font-size: 0.85rem; }
+  .report-pre {
+    margin: 0.4rem 0 0; max-height: 180px; overflow: auto; font-size: 0.75rem;
+    font-family: "IBM Plex Mono", monospace; color: var(--muted); white-space: pre-wrap; word-break: break-all;
+  }
+  .meta-line { color: var(--muted); font-size: 0.8rem; margin-top: 0.35rem; }
+  .conn-card .mono { margin-top: 0.25rem; }
+  .start-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 0.95rem 1.1rem; margin-bottom: 1rem; box-shadow: var(--shadow);
+    width: 100%;
+  }
+  .start-banner .copy { min-width: 0; flex: 1; }
+  .start-banner .title { font-weight: 700; font-size: 1.05rem; margin: 0; }
+  .start-banner .sub { color: var(--muted); font-size: 0.88rem; margin: 0.2rem 0 0; }
+  .start-banner.is-live { border-color: #b5d4f6; background: var(--run-bg); }
+  .start-banner form { margin: 0; flex: 0 0 auto; }
+  .start-banner .btn-xl {
+    padding: 0.75rem 1.6rem; font-size: 1rem; border-radius: 10px; min-width: 12.5rem;
+    justify-content: center;
+  }
+  .start-banner .btn-xl:disabled {
+    opacity: 0.65; cursor: not-allowed;
+  }
+  .log-panel {
+    margin-top: 1rem; width: 100%;
+    background: #0b1220; border: 1px solid #1c2d48; border-radius: 12px;
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .log-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;
+    padding: 0.7rem 0.95rem; border-bottom: 1px solid rgba(120,160,220,0.16);
+    background: linear-gradient(180deg, #121b2e, #0e1626);
+    color: #d7e6ff;
+  }
+  .log-head h2 { margin: 0; font-size: 0.92rem; font-weight: 700; }
+  .log-head .meta { color: #8aa0c0; font-size: 0.78rem; font-family: "IBM Plex Mono", monospace; }
+  .log-tools { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; }
+  .log-tools label {
+    display: inline-flex; align-items: center; gap: 0.35rem; margin: 0;
+    color: #c5d0e2; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+  }
+  .log-tools input { width: auto; margin: 0; }
+  .log-tools .btn {
+    background: rgba(255,255,255,0.06); border-color: rgba(120,160,220,0.25); color: #d7e6ff;
+    min-height: 32px; padding: 0.3rem 0.65rem; font-size: 0.8rem;
+  }
+  .log-tools .btn:hover { background: rgba(255,255,255,0.1); }
+  .log-body {
+    margin: 0; padding: 0.85rem 1rem; height: 280px; overflow: auto;
+    font-family: "IBM Plex Mono", monospace; font-size: 0.78rem; line-height: 1.45;
+    color: #c8d6ea; white-space: pre-wrap; word-break: break-word;
+    background:
+      linear-gradient(180deg, rgba(61,139,253,0.04), transparent 40%),
+      #0b1220;
+  }
+  .log-body .empty { color: #7e90ab; font-family: inherit; }
+  .log-body .err-line { color: #f07178; }
+  .log-body .warn-line { color: #f0b429; }
+  .log-body .ok-line { color: #3dd68c; }
+  .console-start {
+    margin-top: 0.95rem;
+  }
+  .console-start .btn-start {
+    width: 100%; justify-content: center; padding: 0.7rem 1rem; font-size: 0.95rem;
+    background: linear-gradient(180deg, #3d8bfd, #1f6feb); border: 1px solid #0b4fbf;
+    color: #fff; border-radius: 10px; font-weight: 700; cursor: pointer; font: inherit;
+  }
+  .console-start .btn-start:hover { filter: brightness(1.06); }
+  .console-start .btn-start:disabled {
+    opacity: 0.55; cursor: not-allowed; filter: none;
+  }
+  .console-start .hint {
+    color: var(--ink-dim); font-size: 0.78rem; text-align: center; margin-top: 0.45rem;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .phase-badge.live .dot, .bar.live > i::after, .scan-pulse { animation: none; }
+  }
+</style>
+{% endblock %}
+{% block body %}
+  <div class="start-banner" id="start-banner">
+    <div class="copy">
+      <p class="title" id="start-title">Start a backup for this site</p>
+      <p class="sub" id="start-sub">Downloads website files and database dumps into today’s folder. Already copied files are skipped.</p>
+    </div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+      <form method="post" action="{{ url_for('run_backup', account_id=account.id) }}" style="margin:0" id="form-start-top">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-primary btn-xl" type="submit" id="btn-start-top">Start backup</button>
+      </form>
+      <form method="post" action="{{ url_for('stop_backup', account_id=account.id) }}" style="margin:0;display:none" id="form-stop-top">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-danger btn-xl" type="submit" id="btn-stop-top">Stop</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="live-shell" id="live-root"
+       data-url="{{ url_for('account_live_json', account_id=account.id) }}"
+       data-log-url="{{ url_for('account_log_json', account_id=account.id) }}"
+       data-csrf="{{ csrf_token }}">
+    <section class="console" aria-live="polite">
+      <div class="phase-row">
+        <span class="phase-badge" id="phase-badge"><span class="dot"></span><span id="phase-label">Idle</span></span>
+        <div class="phase-msg" id="phase-msg">Waiting for a backup run…</div>
+      </div>
+      <div class="ring-wrap" id="ring-wrap">
+        <span class="scan-pulse"></span>
+        <span class="scan-pulse"></span>
+        <span class="scan-pulse"></span>
+        <svg viewBox="0 0 200 200" aria-hidden="true">
+          <defs>
+            <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#1f6feb"/>
+              <stop offset="55%" stop-color="#3d8bfd"/>
+              <stop offset="100%" stop-color="#5eead4"/>
+            </linearGradient>
+          </defs>
+          <circle class="ring-track" cx="100" cy="100" r="90"></circle>
+          <circle class="ring-prog" id="ring-prog" cx="100" cy="100" r="90"></circle>
+        </svg>
+        <div class="ring-center">
+          <div>
+            <div class="ring-pct" id="ring-pct">0%</div>
+            <div class="ring-sub" id="ring-sub">of queued bytes</div>
+          </div>
+        </div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat"><div class="k">Speed</div><div class="v" id="st-speed">—</div></div>
+        <div class="stat"><div class="k">ETA</div><div class="v" id="st-eta">—</div></div>
+        <div class="stat"><div class="k">Downloaded</div><div class="v good" id="st-dl">0</div></div>
+        <div class="stat"><div class="k">Failed</div><div class="v bad" id="st-fail">0</div></div>
+        <div class="stat"><div class="k">Scanned</div><div class="v" id="st-scan">0</div></div>
+        <div class="stat"><div class="k">Skipped</div><div class="v" id="st-skip">0</div></div>
+      </div>
+      <div class="console-start">
+        <form method="post" action="{{ url_for('run_backup', account_id=account.id) }}" style="margin:0" id="form-start-console">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn-start" type="submit" id="btn-start-console">Start backup</button>
+        </form>
+        <form method="post" action="{{ url_for('stop_backup', account_id=account.id) }}" style="margin:0;display:none" id="form-stop-console">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button class="btn btn-danger" type="submit" id="btn-stop-console">Stop backup</button>
+        </form>
+        <div class="hint" id="start-console-hint">Runs in the background on this PC. Progress updates here live.</div>
+      </div>
+    </section>
+
+    <div class="right-col">
+      <section class="panel-lite">
+        <h2>Current file <span id="file-attempt"></span></h2>
+        <div class="current-file" id="current-path">No active transfer</div>
+        <div class="bar" id="file-bar"><i id="file-bar-fill"></i></div>
+        <div class="bar-meta">
+          <span id="file-bytes">0 B / 0 B</span>
+          <span id="bytes-total">Queue 0 B</span>
+        </div>
+      </section>
+
+      <section class="panel-lite">
+        <h2>Throughput <span id="spark-hint">live samples</span></h2>
+        <div class="spark-wrap">
+          <canvas id="spark" width="640" height="96"></canvas>
+          <div class="spark-empty" id="spark-empty">Start a backup to see live speed</div>
+        </div>
+      </section>
+
+      <section class="panel-lite">
+        <h2>File activity <span id="recent-count">0</span></h2>
+        <div class="file-stream" id="file-stream">
+          <div class="file-row"><span class="chip queued">idle</span><div class="path">No files yet</div><span></span></div>
+        </div>
+        <div class="meta-line" id="run-meta"></div>
+      </section>
+
+      <section class="panel-lite" id="report-panel">
+        <h2>Done / not done <span id="report-updated" class="hint" style="font-weight:600;text-transform:none;letter-spacing:0;"></span></h2>
+        <p class="hint" id="report-note" style="margin:0 0 0.65rem;">
+          Resume skips unchanged files (size + timestamp). Open a section to see paths.
+        </p>
+        <div class="row" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:0.45rem;margin-bottom:0.65rem;">
+          <div class="stat-lite"><div class="k">Downloaded</div><div class="v" id="rp-dl">0</div></div>
+          <div class="stat-lite"><div class="k">Unchanged</div><div class="v" id="rp-skip">0</div></div>
+          <div class="stat-lite"><div class="k">Failed</div><div class="v" id="rp-fail">0</div></div>
+          <div class="stat-lite"><div class="k">Left out</div><div class="v" id="rp-left">0</div></div>
+          <div class="stat-lite"><div class="k">Still queued</div><div class="v" id="rp-queue">0</div></div>
+        </div>
+        <details class="report-block" id="rp-fail-box"><summary>Failed downloads</summary><pre class="report-pre" id="rp-fail-list">(none)</pre></details>
+        <details class="report-block" id="rp-left-box"><summary>Left out (server refused)</summary><pre class="report-pre" id="rp-left-list">(none)</pre></details>
+        <details class="report-block" id="rp-queue-box"><summary>Not done yet (resume will continue)</summary><pre class="report-pre" id="rp-queue-list">(none)</pre></details>
+        <details class="report-block"><summary>Recently downloaded</summary><pre class="report-pre" id="rp-dl-list">(none)</pre></details>
+      </section>
+
+      <section class="panel-lite conn-card">
+        <h2>Connection</h2>
+        <div>{{ account.ftp.protocol|upper }} · {{ account.ftp.host }}:{{ account.ftp.port }}</div>
+        <div class="mono">{{ account.ftp.user }} · remote {{ account.ftp.remote_root }}</div>
+        <div class="mono" id="data-dir">{{ live.data_dir if live else '' }}</div>
+      </section>
+    </div>
+  </div>
+
+  <section class="log-panel" aria-label="Backup log">
+    <div class="log-head">
+      <div>
+        <h2>Live log</h2>
+        <div class="meta" id="log-name">Waiting for log file…</div>
+      </div>
+      <div class="log-tools">
+        <label><input type="checkbox" id="log-follow" checked> Follow</label>
+        <button type="button" class="btn" id="log-clear">Clear view</button>
+        <button type="button" class="btn" id="log-copy">Copy</button>
+      </div>
+    </div>
+    <pre class="log-body" id="log-body"><span class="empty">Log lines appear here when a backup runs…</span></pre>
+  </section>
+
+<script>
+(function () {
+  const root = document.getElementById("live-root");
+  const url = root.dataset.url;
+  const logUrl = root.dataset.logUrl;
+  const CIRC = 2 * Math.PI * 90;
+  const ring = document.getElementById("ring-prog");
+  ring.style.strokeDasharray = String(CIRC);
+
+  const els = {
+    badge: document.getElementById("phase-badge"),
+    phaseLabel: document.getElementById("phase-label"),
+    phaseMsg: document.getElementById("phase-msg"),
+    ringWrap: document.getElementById("ring-wrap"),
+    ringPct: document.getElementById("ring-pct"),
+    ringSub: document.getElementById("ring-sub"),
+    speed: document.getElementById("st-speed"),
+    eta: document.getElementById("st-eta"),
+    dl: document.getElementById("st-dl"),
+    fail: document.getElementById("st-fail"),
+    scan: document.getElementById("st-scan"),
+    skip: document.getElementById("st-skip"),
+    path: document.getElementById("current-path"),
+    attempt: document.getElementById("file-attempt"),
+    fileBar: document.getElementById("file-bar"),
+    fileFill: document.getElementById("file-bar-fill"),
+    fileBytes: document.getElementById("file-bytes"),
+    bytesTotal: document.getElementById("bytes-total"),
+    stream: document.getElementById("file-stream"),
+    recentCount: document.getElementById("recent-count"),
+    runMeta: document.getElementById("run-meta"),
+    sparkEmpty: document.getElementById("spark-empty"),
+    sparkHint: document.getElementById("spark-hint"),
+    canvas: document.getElementById("spark"),
+    rpDl: document.getElementById("rp-dl"),
+    rpSkip: document.getElementById("rp-skip"),
+    rpFail: document.getElementById("rp-fail"),
+    rpLeft: document.getElementById("rp-left"),
+    rpQueue: document.getElementById("rp-queue"),
+    rpFailList: document.getElementById("rp-fail-list"),
+    rpLeftList: document.getElementById("rp-left-list"),
+    rpQueueList: document.getElementById("rp-queue-list"),
+    rpDlList: document.getElementById("rp-dl-list"),
+    rpUpdated: document.getElementById("report-updated"),
+    rpNote: document.getElementById("report-note"),
+    btnRun: document.getElementById("btn-run"),
+  };
+
+  function fillList(el, rows) {
+    if (!el) return;
+    if (!rows || !rows.length) {
+      el.textContent = "(none)";
+      return;
+    }
+    el.textContent = rows.join("\n");
+  }
+
+  function renderReport(d) {
+    const r = d.file_report || {};
+    const detail = (d.run && d.run.detail) || {};
+    els.rpDl.textContent = String(r.downloaded != null ? r.downloaded : (d.run && d.run.files_downloaded) || 0);
+    els.rpSkip.textContent = String(r.skipped != null ? r.skipped : (d.run && d.run.files_skipped) || 0);
+    els.rpFail.textContent = String(r.failed != null ? r.failed : (d.run && d.run.files_failed) || 0);
+    els.rpLeft.textContent = String((r.left_out_paths || detail.left_out || []).length || r.warnings || 0);
+    els.rpQueue.textContent = String((r.still_queued || []).length);
+    fillList(els.rpFailList, r.failed_paths || detail.failed_paths);
+    fillList(els.rpLeftList, r.left_out_paths || detail.left_out);
+    fillList(els.rpQueueList, r.still_queued);
+    fillList(els.rpDlList, r.downloaded_paths);
+    if (r.updated_at) {
+      els.rpUpdated.textContent = "· updated " + String(r.updated_at).replace("T", " ").replace("+00:00", "Z").slice(0, 19);
+    } else {
+      els.rpUpdated.textContent = "";
+    }
+    if (detail.db_soft_fail) {
+      els.rpNote.textContent = "Files finished. Database dump was skipped (enter DB details on Edit). " + (d.resume_hint || "");
+    } else {
+      els.rpNote.textContent = (r.note || d.resume_hint || "Resume skips unchanged files.");
+    }
+    const st = d.run && d.run.status;
+    if (els.btnRun && (st === "failed" || st === "interrupted" || (r.still_queued || []).length)) {
+      els.btnRun.textContent = "Resume backup";
+    } else if (els.btnRun && d.live) {
+      els.btnRun.textContent = "Backup running…";
+    } else if (els.btnRun) {
+      els.btnRun.textContent = "Resume / Backup";
+    }
+  }
+
+  let localSamples = [];
+  let timer = null;
+  let failStreak = 0;
+
+  function humanBytes(n) {
+    n = Number(n) || 0;
+    const u = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+    return (i === 0 ? String(Math.round(n)) : n.toFixed(n >= 10 ? 1 : 2)) + " " + u[i];
+  }
+  function humanSpeed(bps) {
+    if (!bps || bps < 1) return "—";
+    return humanBytes(bps) + "/s";
+  }
+  function humanEta(sec) {
+    if (sec == null || !isFinite(sec) || sec < 0) return "—";
+    sec = Math.round(sec);
+    if (sec < 60) return sec + "s";
+    if (sec < 3600) return Math.floor(sec / 60) + "m " + (sec % 60) + "s";
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    return h + "h " + m + "m";
+  }
+  function phaseClass(phase, live) {
+    if (live && (phase === "scanning" || phase === "transferring")) return "live";
+    if (phase === "done") return "ok";
+    if (phase === "failed" || phase === "stale") return phase === "stale" ? "stale" : "bad";
+    return "";
+  }
+  function phaseText(phase, live) {
+    if (phase === "scanning") return "Scanning";
+    if (phase === "transferring") return "Downloading";
+    if (phase === "done") return "Complete";
+    if (phase === "failed") return "Failed";
+    if (phase === "stale") return "Stopped";
+    return live ? "Live" : "Idle";
+  }
+
+  function drawSpark(samples) {
+    const c = els.canvas;
+    const dpr = window.devicePixelRatio || 1;
+    const w = c.clientWidth || 640;
+    const h = 96;
+    c.width = Math.floor(w * dpr);
+    c.height = Math.floor(h * dpr);
+    const ctx = c.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    if (!samples.length) {
+      els.sparkEmpty.style.display = "grid";
+      return;
+    }
+    els.sparkEmpty.style.display = "none";
+    const vals = samples.map(s => Number(s.bps) || 0);
+    const max = Math.max(1, ...vals);
+    ctx.beginPath();
+    ctx.strokeStyle = "rgba(31,111,235,0.95)";
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    samples.forEach((s, i) => {
+      const x = samples.length === 1 ? w / 2 : (i / (samples.length - 1)) * (w - 8) + 4;
+      const y = h - 8 - ((Number(s.bps) || 0) / max) * (h - 20);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    // fill under curve
+    ctx.lineTo(w - 4, h);
+    ctx.lineTo(4, h);
+    ctx.closePath();
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, "rgba(61,139,253,0.28)");
+    g.addColorStop(1, "rgba(61,139,253,0.02)");
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+
+  function renderStream(recent, currentPath) {
+    const rows = (recent || []).slice(0, 40);
+    els.recentCount.textContent = rows.length + " shown";
+    if (!rows.length) {
+      els.stream.innerHTML = '<div class="file-row"><span class="chip queued">idle</span><div class="path">No files yet</div><span></span></div>';
+      return;
+    }
+    els.stream.innerHTML = rows.map(r => {
+      const st = r.status || "queued";
+      const active = (r.path === currentPath && st === "transferring") ? " active" : "";
+      const size = humanBytes(r.size || 0);
+      return '<div class="file-row' + active + '">' +
+        '<span class="chip ' + st + '">' + st + '</span>' +
+        '<div class="path" title="' + (r.error || "") + '">' + (r.path || "") + '</div>' +
+        '<span class="mono" style="color:var(--muted)">' + size + '</span></div>';
+    }).join("");
+  }
+
+  function setStartEnabled(enabled, label) {
+    ["btn-start-top", "btn-start-console", "btn-run"].forEach(id => {
+      const b = document.getElementById(id);
+      if (!b) return;
+      b.disabled = !enabled;
+      if (id !== "btn-run" && label) b.textContent = label;
+    });
+    const running = !enabled;
+    ["form-stop-top", "form-stop-console"].forEach(id => {
+      const f = document.getElementById(id);
+      if (f) f.style.display = running ? "" : "none";
+    });
+    ["form-start-top", "form-start-console"].forEach(id => {
+      const f = document.getElementById(id);
+      if (f) f.style.display = running ? "none" : "";
+    });
+    const banner = document.getElementById("start-banner");
+    if (banner) banner.classList.toggle("is-live", running);
+    const title = document.getElementById("start-title");
+    const sub = document.getElementById("start-sub");
+    const hint = document.getElementById("start-console-hint");
+    if (running) {
+      if (title) title.textContent = "Backup running";
+      if (sub) sub.textContent = "This page updates live. Stop cancels the process; Resume later skips unchanged files.";
+      if (hint) hint.textContent = "A run is already in progress for this account.";
+    } else {
+      if (title) title.textContent = "Start a backup for this site";
+      if (sub) sub.textContent = "Downloads website files and database dumps into today’s folder. Already copied files are skipped.";
+      if (hint) hint.textContent = "Runs in the background on this PC. Progress updates here live.";
+    }
+  }
+
+  function apply(d) {
+    const live = !!d.live;
+    const phase = d.phase || "idle";
+    const runStatus = d.run && d.run.status;
+    els.badge.className = "phase-badge " + phaseClass(phase, live);
+    els.phaseLabel.textContent = phaseText(phase, live);
+    if (live) {
+      els.phaseMsg.textContent = d.message || "Backup in progress";
+    } else if (runStatus === "partial") {
+      els.phaseMsg.textContent = (d.run && d.run.error) || "Partial — files OK, database dump incomplete. Fix Remote MySQL / credentials, then Resume.";
+    } else if (phase === "failed" || runStatus === "failed") {
+      els.phaseMsg.textContent = (d.run && d.run.error) || d.message || "Last backup failed — fix the error, then Start backup";
+    } else if (phase === "stale") {
+      els.phaseMsg.textContent = "Previous run stopped early — Start backup to continue (unchanged files are skipped)";
+    } else if (phase === "done") {
+      els.phaseMsg.textContent = d.message || "Last backup finished";
+    } else {
+      els.phaseMsg.textContent = "No active backup — press Start backup";
+    }
+    els.ringWrap.classList.toggle("scanning", phase === "scanning" && live);
+    setStartEnabled(!live, live ? "Running…" : "Start backup");
+
+    const pct = Math.max(0, Math.min(100, Number(d.pct) || 0));
+    ring.style.strokeDashoffset = String(CIRC * (1 - pct / 100));
+    els.ringPct.textContent = Math.round(pct) + "%";
+    if (phase === "scanning") {
+      const folder = d.current_folder ? (" · " + d.current_folder) : "";
+      els.ringSub.textContent = (d.folders_scanned || 0) + " folders · " + (d.scanned || 0) + " files" + folder;
+    } else {
+      els.ringSub.textContent = d.bytes_total > 0 ? "of queued bytes" : "of queued files";
+    }
+
+    els.speed.textContent = humanSpeed(d.speed_bps);
+    els.eta.textContent = humanEta(d.eta_seconds);
+    els.dl.textContent = String(d.downloaded || 0);
+    els.fail.textContent = String(d.failed || 0);
+    els.scan.textContent = String(d.scanned || 0);
+    els.skip.textContent = String(d.skipped || 0);
+
+    const cur = d.current_path || "";
+    if (live && phase === "scanning" && d.current_folder) {
+      els.path.textContent = "Folder: " + d.current_folder;
+    } else {
+      els.path.textContent = cur || (live ? (d.message || "Working…") : "No active transfer");
+    }
+    if (d.current_attempt) {
+      els.attempt.textContent = "attempt " + d.current_attempt + "/" + (d.current_retries_max || 3);
+    } else {
+      els.attempt.textContent = "";
+    }
+    const csz = Number(d.current_size) || 0;
+    const cxf = Number(d.current_transferred) || 0;
+    const filePct = csz > 0 ? Math.min(100, (cxf / csz) * 100) : (live && phase === "transferring" ? 8 : 0);
+    els.fileFill.style.width = filePct + "%";
+    els.fileBar.classList.toggle("live", live && phase === "transferring");
+    els.fileBytes.textContent = humanBytes(cxf) + " / " + humanBytes(csz);
+    els.bytesTotal.textContent = "Queue " + humanBytes(d.bytes_total) + " · done " + humanBytes(d.bytes_done);
+
+    renderStream(d.recent, cur);
+    renderReport(d);
+
+    const samples = (d.samples && d.samples.length) ? d.samples : localSamples;
+    if (live && d.speed_bps != null) {
+      const t = Date.now() / 1000;
+      localSamples.push({ t: t, bps: Number(d.speed_bps) || 0, bytes: d.bytes_done || 0 });
+      if (localSamples.length > 90) localSamples = localSamples.slice(-90);
+    }
+    drawSpark(samples);
+    els.sparkHint.textContent = live ? "updating…" : (samples.length ? "last run" : "live samples");
+
+    let meta = "";
+    if (d.run) {
+      meta = "Last run #" + d.run.id + " · " + (d.run.status || "?");
+      if (d.run.error) meta += " · " + d.run.error;
+    }
+    if (d.lock && d.lock.held) meta = (meta ? meta + " · " : "") + "lock pid " + d.lock.pid;
+    els.runMeta.textContent = meta;
+  }
+
+  const logBody = document.getElementById("log-body");
+  const logName = document.getElementById("log-name");
+  const logFollow = document.getElementById("log-follow");
+  let logOffset = 0;
+  let logTimer = null;
+  let logLive = false;
+  let logText = "";
+
+  function colorizeLog(text) {
+    return text.split(/\r?\n/).map(line => {
+      if (!line) return "";
+      const esc = line
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+      let cls = "";
+      if (/\bERROR\b|Traceback|error_perm|FAILED|530 |authentication failed/i.test(line)) cls = "err-line";
+      else if (/\bWARNING\b|warn/i.test(line)) cls = "warn-line";
+      else if (/\bINFO\b.*\b(Connected|Files sync done|complete|Done —)/i.test(line)) cls = "ok-line";
+      return cls ? ('<span class="' + cls + '">' + esc + "</span>") : esc;
+    }).join("\n");
+  }
+
+  function renderLog() {
+    if (!logText) {
+      logBody.innerHTML = '<span class="empty">Log lines appear here when a backup runs…</span>';
+      return;
+    }
+    const nearBottom = logBody.scrollHeight - logBody.scrollTop - logBody.clientHeight < 48;
+    logBody.innerHTML = colorizeLog(logText);
+    if (logFollow.checked || nearBottom) {
+      logBody.scrollTop = logBody.scrollHeight;
+    }
+  }
+
+  async function tickLog() {
+    try {
+      const res = await fetch(logUrl + "?offset=" + logOffset, {
+        headers: { "Accept": "application/json" },
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      if (data.name) logName.textContent = data.name + (data.path ? " · " + data.path : "");
+      else logName.textContent = "No log file yet for this account today";
+      if (data.reset) {
+        logText = data.text || "";
+      } else if (data.text) {
+        logText += data.text;
+        if (logText.length > 400000) logText = logText.slice(-300000);
+      }
+      if (typeof data.offset === "number") logOffset = data.offset;
+      renderLog();
+    } catch (err) {
+      logName.textContent = "Could not refresh log";
+    }
+    clearTimeout(logTimer);
+    logTimer = setTimeout(tickLog, logLive ? 1000 : 3000);
+  }
+
+  document.getElementById("log-clear").addEventListener("click", () => {
+    logText = "";
+    renderLog();
+  });
+  document.getElementById("log-copy").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(logText || "");
+    } catch (err) { /* ignore */ }
+  });
+
+  async function tick() {
+    try {
+      const res = await fetch(url, { headers: { "Accept": "application/json" }, cache: "no-store" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      failStreak = 0;
+      logLive = !!data.live;
+      apply(data);
+      const interval = data.live ? 1000 : 4000;
+      clearTimeout(timer);
+      timer = setTimeout(tick, interval);
+    } catch (err) {
+      failStreak += 1;
+      els.phaseMsg.textContent = "Could not refresh live status";
+      clearTimeout(timer);
+      timer = setTimeout(tick, failStreak > 3 ? 8000 : 2500);
+    }
+  }
+
+  apply({{ live | tojson }});
+  timer = setTimeout(tick, 800);
+  logTimer = setTimeout(tickLog, 400);
+  window.addEventListener("resize", () => drawSpark(localSamples.length ? localSamples : ({{ live.samples | tojson }} || [])));
+})();
+</script>
+{% endblock %}

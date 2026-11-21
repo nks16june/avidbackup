@@ -50,3 +50,11 @@ def known_hosts_path(root: Path | None = None) -> Path:
 
 def ui_secret_key_path(root: Path | None = None) -> Path:
     return (root or ensure_layout()) / "config" / "ui_secret_key"
+
+
+def ui_token_path(root: Path | None = None) -> Path:
+    return (root or ensure_layout()) / "config" / "ui_token"
+
+
+def audit_log_path(root: Path | None = None) -> Path:
+    return (root or ensure_layout()) / "logs" / "audit.log"

@@ -17,6 +17,6 @@ ShortDescription: Free, local-first backup utility for websites and databases (F
 Installers:
   - Architecture: x64
     InstallerType: inno
-    InstallerUrl: https://github.com/avidwebsolutions/avidbackup/releases/download/v0.1.0/AvidBackup-Setup-0.1.0.exe
+    InstallerUrl: https://github.com/nks16june/avidbackup/releases/download/v0.1.0/AvidBackup-Setup-0.1.0.exe
     InstallerSha256: REPLACE_WITH_RELEASE_SHA256
     Scope: user

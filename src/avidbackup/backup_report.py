@@ -27,7 +27,7 @@ class RunRow:
     label: str
     started: datetime
     duration_s: int | None
-    status: str  # success | failed | running | interrupted
+    status: str  # success | partial | failed | running | interrupted
     files_new: int
     files_skipped: int
     files_failed: int
@@ -79,11 +79,16 @@ class AccountReport:
     label: str
     first_day: date | None
     cells: dict[date, str]
-    last_success: datetime | None
-    files_tracked: int
-    files_bytes: int
-    dumps_count: int
-    dumps_bytes: int
+    files_cells: dict[date, str] = field(default_factory=dict)
+    db_cells: dict[date, str] = field(default_factory=dict)
+    files_updated_by_day: dict[date, int] = field(default_factory=dict)
+    last_success: datetime | None = None
+    last_files_ok: datetime | None = None
+    last_db_ok: datetime | None = None
+    files_tracked: int = 0
+    files_bytes: int = 0
+    dumps_count: int = 0
+    dumps_bytes: int = 0
 
 
 @dataclass
@@ -96,6 +101,8 @@ class Report:
     expected_days: int
     failed_runs: int
     total_bytes: int
+    total_files_bytes: int
+    total_db_bytes: int
     today: date
 
     @property
@@ -167,14 +174,25 @@ def _is_checksum_sidecar(path: Path) -> bool:
 
 
 def list_dump_files(mysql_dir: Path) -> list[Path]:
-    if not mysql_dir.is_dir():
-        return []
-    seen: dict[Path, None] = {}
-    for pattern in DUMP_GLOBS:
-        for p in mysql_dir.glob(pattern):
-            if p.is_file() and not p.name.startswith(".") and not _is_checksum_sidecar(p):
-                seen[p] = None
-    return sorted(seen, key=lambda p: p.stat().st_mtime, reverse=True)
+    from avidbackup.daystore import dump_directories
+
+    roots: list[Path] = []
+    if mysql_dir.name in {"mysql", "db"}:
+        account_root = mysql_dir.parent if mysql_dir.name == "mysql" else mysql_dir.parent.parent
+        roots.extend(dump_directories(account_root))
+    if mysql_dir not in roots:
+        roots.append(mysql_dir)
+    seen: dict[tuple[int, int], Path] = {}
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for pattern in DUMP_GLOBS:
+            for p in root.glob(pattern):
+                if not p.is_file() or p.name.startswith(".") or _is_checksum_sidecar(p):
+                    continue
+                st = p.stat()
+                seen[(st.st_dev, st.st_ino)] = p
+    return sorted(seen.values(), key=lambda p: p.stat().st_mtime, reverse=True)
 
 
 def _manifest_totals(path: Path) -> tuple[int, int]:
@@ -199,10 +217,68 @@ def _day_status(runs: list[RunRow], *, before_first_run: bool) -> str:
     last = runs[-1]
     if last.status == "success":
         return "ok"
+    if last.status == "partial":
+        return "warn"
     if last.status == "running":
         return "running"
     if any(r.status == "success" for r in runs):
         return "warn"
+    if any(r.status == "partial" for r in runs):
+        return "warn"
+    return "fail"
+
+
+def _files_day_status(runs: list[RunRow], *, before_first_run: bool) -> str:
+    """Status for website-file backup only."""
+    if not runs:
+        return "na" if before_first_run else "missed"
+    if any(r.status == "running" for r in runs):
+        return "running"
+    # partial = files OK, DB not — still counts as files OK for the files row.
+    ok_runs = [
+        r
+        for r in runs
+        if r.status in {"success", "partial"} and r.files_failed == 0
+    ]
+    if ok_runs:
+        if any(r.status in {"failed", "interrupted"} or r.files_failed for r in runs):
+            return "warn"
+        return "ok"
+    if any(r.files_failed or r.status in {"failed", "interrupted"} for r in runs):
+        return "fail"
+    if any(r.status in {"success", "partial"} for r in runs):
+        return "ok"
+    return "fail"
+
+
+def _db_day_status(
+    runs: list[RunRow],
+    dumps: list[DumpRow],
+    *,
+    before_first_run: bool,
+) -> str:
+    """
+    Status for database dumps only.
+
+    ``ok`` means a dump file is still on disk for this day (restoreable).
+    History alone is not enough — pruned dumps must not look like restore points.
+    """
+    if dumps:
+        if any(r.status in {"failed", "interrupted", "partial"} and r.dumps == 0 for r in runs):
+            return "warn"
+        return "ok"
+    if not runs:
+        return "na" if before_first_run else "missed"
+    if any(r.status == "running" for r in runs):
+        return "running"
+    # History said a dump was taken but the file is gone (retention / move).
+    if any(r.dumps > 0 and r.status in {"success", "failed", "partial"} for r in runs):
+        return "missed"
+    # Ran with intentional DB attempt but no dump on disk (partial / failed discover).
+    if any(r.status == "partial" for r in runs):
+        return "fail"
+    if any(r.status == "success" for r in runs):
+        return "missed"
     return "fail"
 
 
@@ -239,6 +315,8 @@ def build_report(
     last_success: datetime | None = None
     failed_runs = 0
     total_bytes = 0
+    total_files_bytes = 0
+    total_db_bytes = 0
 
     for acct in accounts:
         try:
@@ -258,8 +336,30 @@ def build_report(
             started = started.astimezone(tz)
             finished = _parse_utc(r.get("finished_at"))
             status = r["status"]
-            if status == "running" and (now - started) > timedelta(hours=STALE_RUNNING_HOURS):
-                status = "interrupted"
+            error = r.get("error")
+            if status == "running":
+                from avidbackup.history import interrupt_reason
+                from avidbackup.locks import pid_alive
+
+                detail = {}
+                try:
+                    detail = json.loads(r.get("detail_json") or "{}")
+                except (TypeError, json.JSONDecodeError):
+                    detail = {}
+                pid = detail.get("pid")
+                try:
+                    pid_i = int(pid) if pid is not None else None
+                except (TypeError, ValueError):
+                    pid_i = None
+                dead = pid_i is not None and not pid_alive(pid_i)
+                too_old = (now - started) > timedelta(hours=STALE_RUNNING_HOURS)
+                if dead or too_old:
+                    status = "interrupted"
+                    error = error or interrupt_reason(
+                        pid=pid_i if dead else None,
+                        account_id=acct.id,
+                        hours=None if dead else STALE_RUNNING_HOURS,
+                    )
             duration = int((finished - started.astimezone(finished.tzinfo)).total_seconds()) if finished else None
             row = RunRow(
                 account_id=acct.id,
@@ -273,22 +373,40 @@ def build_report(
                 files_bytes=int(r.get("files_bytes") or 0),
                 dumps=int(r.get("mysql_downloaded") or 0),
                 dump_bytes=int(r.get("mysql_bytes") or 0),
-                error=r.get("error"),
+                error=error,
             )
             d = started.date()
             if d in acct_runs:
                 acct_runs[d].append(row)
                 runs_by_day[d].append(row)
-            if status == "failed":
+            if status in {"failed", "interrupted"}:
                 failed_runs += 1
-            if status == "success" and (acct_last_success is None or started > acct_last_success):
+            # Partial counts as files progress for "last success" date, but UI
+            # must still show Partial — tip comes from run.error.
+            if status in {"success", "partial"} and (
+                acct_last_success is None or started > acct_last_success
+            ):
                 acct_last_success = started
 
         cells: dict[date, str] = {}
+        files_cells: dict[date, str] = {}
+        db_cells: dict[date, str] = {}
+        files_updated_by_day: dict[date, int] = {}
+        last_files_ok: datetime | None = None
+        last_db_ok: datetime | None = None
         for d in day_list:
             before_first = first_day is None or d < first_day
-            cells[d] = _day_status(acct_runs[d], before_first_run=before_first)
+            day_runs = acct_runs[d]
+            cells[d] = _day_status(day_runs, before_first_run=before_first)
+            files_cells[d] = _files_day_status(day_runs, before_first_run=before_first)
+            files_updated_by_day[d] = sum(r.files_new for r in day_runs)
+            for r in day_runs:
+                if r.status in {"success", "partial"} and r.files_failed == 0:
+                    if last_files_ok is None or r.started > last_files_ok:
+                        last_files_ok = r.started
         per_account_cells.append(cells)
+
+        from avidbackup.day_browser import dump_day_key
 
         dump_paths = list_dump_files(settings.local_mysql_dir)
         dumps_bytes = 0
@@ -296,8 +414,14 @@ def build_report(
             st = p.stat()
             dumps_bytes += st.st_size
             created = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).astimezone(tz)
-            if created.date() in dumps_by_day:
-                dumps_by_day[created.date()].append(
+            # Prefer filename _YYYYMMDD_ so calendar day matches restore day browser.
+            stamp = dump_day_key(p)
+            try:
+                dump_day = date.fromisoformat(stamp) if stamp else created.date()
+            except ValueError:
+                dump_day = created.date()
+            if dump_day in dumps_by_day:
+                dumps_by_day[dump_day].append(
                     DumpRow(
                         account_id=acct.id,
                         label=acct.label,
@@ -305,13 +429,24 @@ def build_report(
                         size=st.st_size,
                         created=created,
                         checksum=Path(str(p) + ".sha256").is_file(),
-                        kept_until=(created.date() + timedelta(days=retention_days))
+                        kept_until=(dump_day + timedelta(days=retention_days))
                         if retention_days > 0
                         else None,
                     )
                 )
+                if last_db_ok is None or created > last_db_ok:
+                    last_db_ok = created
+        for d in day_list:
+            before_first = first_day is None or d < first_day
+            db_cells[d] = _db_day_status(
+                acct_runs[d],
+                [x for x in dumps_by_day[d] if x.account_id == acct.id],
+                before_first_run=before_first,
+            )
         files_count, files_bytes = _manifest_totals(settings.manifest_path)
         total_bytes += files_bytes + dumps_bytes
+        total_files_bytes += files_bytes
+        total_db_bytes += dumps_bytes
         if acct_last_success and (last_success is None or acct_last_success > last_success):
             last_success = acct_last_success
         acc_reports.append(
@@ -320,7 +455,12 @@ def build_report(
                 label=acct.label,
                 first_day=first_day,
                 cells=cells,
+                files_cells=files_cells,
+                db_cells=db_cells,
+                files_updated_by_day=files_updated_by_day,
                 last_success=acct_last_success,
+                last_files_ok=last_files_ok,
+                last_db_ok=last_db_ok,
                 files_tracked=files_count,
                 files_bytes=files_bytes,
                 dumps_count=len(dump_paths),
@@ -361,5 +501,7 @@ def build_report(
         expected_days=expected,
         failed_runs=failed_runs,
         total_bytes=total_bytes,
+        total_files_bytes=total_files_bytes,
+        total_db_bytes=total_db_bytes,
         today=today,
     )

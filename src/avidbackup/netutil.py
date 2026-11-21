@@ -21,7 +21,11 @@ def _can_bind(host: str, port: int) -> bool:
         family = socket.AF_INET
     try:
         with socket.socket(family, socket.SOCK_STREAM) as sock:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            # Never set SO_REUSEADDR for this probe: on Windows it lets a second
+            # program bind a port that is already in use, so the check would lie.
+            exclusive = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
+            if exclusive is not None:
+                sock.setsockopt(socket.SOL_SOCKET, exclusive, 1)
             sock.bind((bind_host, port))
         return True
     except OSError:

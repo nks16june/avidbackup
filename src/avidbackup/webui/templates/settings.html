@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Settings · {{ brand }}{% endblock %}
+{% block page_title %}Settings{% endblock %}
+{% block page_subtitle %}
+  <p class="hint">Retention, storage path, phone alerts, and optional tools.</p>
+{% endblock %}
 {% block body %}
-  <h1>Retention &amp; paths</h1>
-  <p class="muted">Defaults for new accounts. Each account can override MySQL retention on its edit page.</p>
-  <form method="post" class="card" style="margin-top:1rem;">
+  <form method="post" class="card">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Data root (where backups are stored)</label>
     <input name="data_root" value="{{ cfg.data_root }}" placeholder="~/avidbackup-data or absolute path">
@@ -48,8 +50,24 @@
       </div>
     </div>
 
+    <h2>Phone status <span class="muted" style="font-weight:400;">(optional, off by default)</span></h2>
+    <p class="muted">Sends a message after each backup run and each morning. It goes through <strong>ntfy</strong>, a third-party service
+      ({{ cfg.notify.ntfy_server }}), which means that service sees the message. By default only a generic message is sent
+      (no site names, paths or counts). Prefer to keep everything on your own network? Point <code>ntfy_server</code> in
+      <code>accounts.json</code> at a self-hosted ntfy server.</p>
+    <label class="check"><input type="checkbox" name="phone_enabled" {% if cfg.notify.phone_enabled %}checked{% endif %}> Send status messages to my phone through ntfy</label>
+    <label class="check"><input type="checkbox" name="ntfy_details" {% if cfg.notify.ntfy_details %}checked{% endif %}> Include site names and details in the message (shared with the ntfy server)</label>
+    {% if phone_url %}
+      <p>Subscribe on your phone: <a href="{{ phone_url }}">{{ phone_url }}</a></p>
+    {% else %}
+      <p class="muted">Save settings to create the private phone link.</p>
+    {% endif %}
+    <p>
+      <button class="btn" type="submit" formaction="{{ url_for('test_phone') }}">Send a test to my phone</button>
+    </p>
+
     <h2>Optional notifications</h2>
-    <label>Webhook URL (JSON POST on success)</label>
+    <label>Webhook URL (JSON POST)</label>
     <input name="webhook_url" value="{{ cfg.notify.webhook_url }}">
     <label>Webhook secret / Bearer <span class="muted">(blank = keep)</span></label>
     <input type="password" name="webhook_secret" value="" autocomplete="new-password" placeholder="••••">
@@ -68,6 +86,22 @@
       <button class="btn btn-primary" type="submit">Save settings</button>
     </p>
   </form>
+
+  <h2 style="margin-top:2rem;">System agent</h2>
+  <div class="card">
+    <p class="muted">AvidBackup is a local system agent. The browser is only a client — closing a tab must not stop backups.</p>
+    {% if agent.running %}
+      <p><span class="pill ok">● Running</span> pid {{ agent.pid }} · <a href="{{ agent.ui_url }}">{{ agent.ui_url }}</a></p>
+    {% else %}
+      <p><span class="pill fail">● Not running</span></p>
+    {% endif %}
+    <p class="hint">Autostart task: {% if agent.installed %}<code>{{ agent.task_name }}</code> (installed){% else %}not installed{% endif %}</p>
+    {% if agent.detail %}<p class="muted">{{ agent.detail }}</p>{% endif %}
+    <form method="post" action="{{ url_for('install_agent') }}" style="display:inline;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-primary" type="submit">Install / repair agent</button>
+    </form>
+  </div>
 
   <h2 style="margin-top:2rem;">Optional tools</h2>
   <div class="card">

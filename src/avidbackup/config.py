@@ -32,6 +32,9 @@ class Settings:
     site_url: str = ""
     mysql_config_candidates: list[str] = field(
         default_factory=lambda: [
+            # Expanded at runtime via expand_mysql_config_candidates() /
+            # public_html prefixes + deep scan. Keep a short explicit list here
+            # for backwards-compatible Settings serialization.
             "wp-config.php",
             "configuration.php",
             ".env",
@@ -42,6 +45,11 @@ class Settings:
             "connection.php",
             "app/config/database.php",
             "application/config/database.php",
+            "public_html/include/config.php",
+            "public_html/includes/config.php",
+            "public_html/wp-config.php",
+            "public_html/configuration.php",
+            "public_html/.env",
         ]
     )
     mysql_host: str = ""

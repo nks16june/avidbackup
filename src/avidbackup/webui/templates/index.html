@@ -1,66 +1,409 @@
 {% extends "base.html" %}
-{% block title %}Accounts · {{ brand }}{% endblock %}
-{% block body %}
-  <div style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;">
-    <div>
-      <h1>Website accounts</h1>
-      <p class="muted" style="margin:0;">Add FTP + one or more databases, set retention, then run backup.</p>
-    </div>
-    <form method="post" action="{{ url_for('run_all') }}">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button class="btn btn-warn" type="submit">Backup all enabled</button>
-    </form>
-  </div>
+{% block title %}Sites · {{ brand }}{% endblock %}
+{% block page_title %}Backup fleet{% endblock %}
+{% block page_subtitle %}
+  <p class="hint">Local protection status for every website on this machine.</p>
+{% endblock %}
+{% block top_actions %}
+  <a class="btn" href="{{ url_for('backups') }}">Calendar</a>
+  <form method="post" action="{{ url_for('run_all') }}" style="margin:0;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn btn-warn" type="submit">Start all</button>
+  </form>
+  <a class="btn btn-primary" href="{{ url_for('new_account') }}">Add website</a>
+{% endblock %}
+{% block head %}
+{% set ov = overview or {} %}
+{% if (ov.running or 0) > 0 %}
+<meta http-equiv="refresh" content="8">
+{% endif %}
+<style>
+  .fleet {
+    --rail: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.15rem;
+  }
 
-  {% if not rows %}
-    <div class="card" style="margin-top:1rem;">
-      <p>No accounts yet.</p>
-      <a class="btn btn-primary" href="{{ url_for('new_account') }}">Add your first website</a>
-    </div>
-  {% else %}
-    <table style="margin-top:1rem;">
-      <thead>
-        <tr>
-          <th>Account</th>
-          <th>FTP</th>
-          <th>DBs</th>
-          <th>Retention</th>
-          <th>Status</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in rows %}
-          {% set a = row.account %}
-          <tr>
-            <td>
-              <strong>{{ a.label }}</strong>
-              {% if not a.enabled %}<span class="bad"> · off</span>{% endif %}
-              <div class="mono">{{ a.id }} · <a href="{{ a.site_url }}" target="_blank" rel="noopener">{{ a.site_url }}</a></div>
-              <div class="mono">{{ row.data_dir }}</div>
-            </td>
-            <td class="mono">{{ a.ftp.protocol }}://{{ a.ftp.user }}@{{ a.ftp.host }}:{{ a.ftp.port }}</td>
-            <td>{{ row.db_count }}</td>
-            <td>MySQL {{ a.retention.mysql_days }}d<br>
-              {% if a.retention.files_forever %}<span class="ok">files forever</span>{% else %}files {{ a.retention.files_days }}d{% endif %}
-            </td>
-            <td class="{% if row.initial_done %}ok{% else %}bad{% endif %}">
-              {% if row.initial_done %}full done{% else %}needs full{% endif %}
-            </td>
-            <td style="white-space:nowrap;">
-              <a class="btn" href="{{ url_for('edit_account', account_id=a.id) }}">Edit</a>
-              <form style="display:inline" method="post" action="{{ url_for('run_backup', account_id=a.id) }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <button class="btn btn-primary" type="submit">Backup</button>
-              </form>
-              <form style="display:inline" method="post" action="{{ url_for('remove_account', account_id=a.id) }}" onsubmit="return confirm('Remove {{ a.id }} from config? Data folder is kept.');">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <button class="btn btn-danger" type="submit">Remove</button>
-              </form>
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% endif %}
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+  .metric {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 1rem 1.05rem 0.95rem;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    min-width: 0;
+  }
+  .metric::before {
+    content: "";
+    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: #c5d0e0;
+  }
+  .metric.ok::before { background: var(--ok); }
+  .metric.bad::before { background: var(--bad); }
+  .metric.run::before { background: var(--run); }
+  .metric .k {
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .metric .v {
+    margin-top: 0.35rem;
+    font-size: 1.65rem; font-weight: 700; letter-spacing: -0.03em;
+    line-height: 1;
+  }
+  .metric .s {
+    margin-top: 0.4rem;
+    font-size: 0.78rem; color: var(--muted);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .metric.ok .v { color: var(--ok); }
+  .metric.bad .v { color: var(--bad); }
+  .metric.run .v { color: var(--run); }
+
+  .roster {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .roster-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 0.75rem; flex-wrap: wrap;
+    padding: 0.9rem 1.15rem;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #f8fafc 0%, #f3f6fa 100%);
+  }
+  .roster-head h2 {
+    margin: 0; font-size: 0.92rem; font-weight: 700; letter-spacing: -0.01em;
+  }
+  .roster-head .sub { color: var(--muted); font-size: 0.8rem; font-weight: 500; }
+
+  .roster-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) 7.5rem minmax(11rem, 1fr) 8.75rem;
+    gap: 0.85rem 1.1rem;
+    padding: 0.55rem 1.15rem 0.55rem calc(1.15rem + var(--rail));
+    color: var(--muted);
+    font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--line);
+    background: #fafbfc;
+  }
+
+  .site-list { display: flex; flex-direction: column; }
+  .site-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) 7.5rem minmax(11rem, 1fr) 8.75rem;
+    gap: 0.85rem 1.1rem;
+    align-items: center;
+    padding: 1rem 1.15rem 1rem calc(1.15rem + var(--rail));
+    border-bottom: 1px solid var(--line);
+    position: relative;
+    background: #fff;
+    transition: background 0.15s ease;
+  }
+  .site-row:last-child { border-bottom: 0; }
+  .site-row:hover { background: #f8fafc; }
+  .site-row::before {
+    content: "";
+    position: absolute; left: 0; top: 0; bottom: 0; width: var(--rail);
+    background: #c9d4e3;
+  }
+  .site-row.is-live::before { background: var(--run); }
+  .site-row.is-ok::before { background: var(--ok); }
+  .site-row.is-attention::before { background: var(--bad); }
+  .site-row.is-warn::before { background: #d4a017; }
+
+  .site-main { min-width: 0; }
+  .site-title {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-weight: 700; font-size: 1rem; letter-spacing: -0.015em;
+  }
+  .site-title a { color: inherit; text-decoration: none; }
+  .site-title a:hover { color: var(--accent); }
+  .site-title .tag {
+    font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.04em; color: var(--bad);
+    background: var(--bad-bg); border: 1px solid #f0b6b0;
+    border-radius: 999px; padding: 0.12rem 0.45rem;
+  }
+  .site-meta {
+    margin-top: 0.35rem;
+    display: flex; flex-wrap: wrap; gap: 0.35rem 0.65rem;
+    align-items: center;
+    color: var(--muted); font-size: 0.8rem;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    padding: 0.12rem 0.45rem;
+    border-radius: 6px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    font-size: 0.72rem; font-weight: 600; color: var(--muted);
+    max-width: 100%;
+  }
+  .chip .mono { font-size: 0.7rem; color: var(--muted); }
+  .path-chip {
+    max-width: min(100%, 22rem);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .site-stats .size {
+    font-weight: 700; font-size: 0.95rem; letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .site-stats .when {
+    margin-top: 0.25rem; font-size: 0.78rem; color: var(--muted);
+    line-height: 1.35;
+  }
+
+  .activity { min-width: 0; }
+  .activity-top {
+    display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+  }
+  .activity .xfer {
+    margin-top: 0.45rem;
+    max-width: 18rem;
+  }
+  .activity .track {
+    height: 6px; border-radius: 999px; background: #e6edf5; overflow: hidden;
+  }
+  .activity .track > i {
+    display: block; height: 100%; border-radius: inherit;
+    background: linear-gradient(90deg, #1f6feb 0%, #3d8bfd 55%, #5b9cf5 100%);
+  }
+  .activity .xfer-meta {
+    margin-top: 0.3rem;
+    display: flex; flex-wrap: wrap; gap: 0.35rem 0.75rem;
+    font-size: 0.74rem; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .activity .xfer-meta b { color: var(--text); font-weight: 650; }
+  .activity .tip {
+    margin-top: 0.35rem;
+    font-size: 0.78rem; color: var(--muted);
+    max-width: 22rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .site-actions {
+    display: flex; flex-direction: column; gap: 0.4rem; align-items: stretch;
+  }
+  .site-actions form { margin: 0; }
+  .site-actions .btn-go {
+    width: 100%; min-height: 36px; font-weight: 700;
+  }
+  .tools {
+    display: flex; flex-wrap: wrap; gap: 0.15rem 0;
+    justify-content: flex-start;
+    font-size: 0.76rem; font-weight: 600;
+  }
+  .tools a, .tools button.linkish {
+    appearance: none; border: 0; background: none; padding: 0.1rem 0.35rem;
+    margin: 0; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer;
+    border-radius: 4px;
+  }
+  .tools a:hover, .tools button.linkish:hover {
+    background: var(--run-bg); text-decoration: none;
+  }
+  .tools .danger { color: var(--bad); }
+  .tools .danger:hover { background: var(--bad-bg); }
+  .tools .dot {
+    color: #c5d0e0; padding: 0 0.05rem; font-weight: 400; user-select: none;
+  }
+
+  .empty {
+    text-align: center; padding: 3rem 1.25rem;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; box-shadow: var(--shadow);
+  }
+  .empty .big { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.4rem; }
+
+  @media (max-width: 1100px) {
+    .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (max-width: 900px) {
+    .roster-cols { display: none; }
+    .site-row {
+      grid-template-columns: minmax(0, 1fr) 8.5rem;
+      grid-template-areas:
+        "main actions"
+        "stats activity";
+      padding-top: 1.05rem; padding-bottom: 1.05rem;
+    }
+    .site-main { grid-area: main; }
+    .site-actions { grid-area: actions; }
+    .site-stats { grid-area: stats; }
+    .activity { grid-area: activity; }
+  }
+  @media (max-width: 640px) {
+    .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .site-row {
+      grid-template-columns: 1fr;
+      grid-template-areas: "main" "stats" "activity" "actions";
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .site-row { transition: none; }
+  }
+</style>
+{% endblock %}
+{% block body %}
+  {% set ov = overview or {} %}
+  {% set attention_n = (ov.fail or 0) + (ov.missed or 0) + (ov.needs_full or 0) %}
+  <div class="fleet">
+    <section class="metrics" aria-label="Fleet overview">
+      <div class="metric">
+        <div class="k">Sites</div>
+        <div class="v">{{ ov.sites or rows|length }}</div>
+        <div class="s">Configured accounts</div>
+      </div>
+      <div class="metric ok">
+        <div class="k">Protected</div>
+        <div class="v">{{ ov.ok or 0 }}</div>
+        <div class="s">Files + database OK today</div>
+      </div>
+      <div class="metric bad">
+        <div class="k">Attention</div>
+        <div class="v">{{ attention_n }}</div>
+        <div class="s">Partial, failed, or needs full</div>
+      </div>
+      <div class="metric run">
+        <div class="k">Running</div>
+        <div class="v">{{ ov.running or 0 }}</div>
+        <div class="s">Active transfers now</div>
+      </div>
+      <div class="metric">
+        <div class="k">Stored</div>
+        <div class="v" style="font-size:1.25rem;padding-top:0.2rem;">{{ (ov.total_bytes or 0) | human_bytes }}</div>
+        <div class="s">{% if ov.last_success %}Last OK {{ ov.last_success.strftime('%d %b %H:%M') }}{% else %}No success yet{% endif %}</div>
+      </div>
+    </section>
+
+    {% if not rows %}
+      <div class="empty">
+        <div class="big">No websites protected yet</div>
+        <p class="muted">Add an FTP/SFTP site and optional databases. Each site backs up independently on this PC.</p>
+        <a class="btn btn-primary" href="{{ url_for('new_account') }}">Add your first website</a>
+      </div>
+    {% else %}
+      <section class="roster" aria-label="Website accounts">
+        <div class="roster-head">
+          <div>
+            <h2>Website accounts</h2>
+            <div class="sub">{{ rows|length }} site{{ '' if rows|length == 1 else 's' }} · Start / Stop per account · Live for transfer detail</div>
+          </div>
+          <a class="btn btn-sm" href="{{ url_for('new_account') }}">Add website</a>
+        </div>
+        <div class="roster-cols" aria-hidden="true">
+          <div>Site</div>
+          <div>Stored</div>
+          <div>Activity</div>
+          <div>Control</div>
+        </div>
+        <div class="site-list">
+          {% for row in rows %}
+            {% set a = row.account %}
+            {% set st = row.status %}
+            {% set lv = row.live %}
+            {% set live = lv and lv.live %}
+            {% set attention = st.status in ('fail', 'missed', 'needs_full') %}
+            {% set warn = st.status == 'warn' %}
+            <article class="site-row {% if live %}is-live{% elif st.status == 'ok' %}is-ok{% elif warn %}is-warn{% elif attention %}is-attention{% endif %}">
+              <div class="site-main">
+                <div class="site-title">
+                  <a href="{{ url_for('account_live', account_id=a.id) }}">{{ a.label }}</a>
+                  {% if not a.enabled %}<span class="tag">Disabled</span>{% endif %}
+                </div>
+                <div class="site-meta">
+                  <span class="chip" title="{{ a.ftp.user }}@{{ a.ftp.host }}:{{ a.ftp.port }}">
+                    <span class="mono">{{ a.ftp.protocol|upper }}</span>
+                    {{ a.ftp.host }}
+                  </span>
+                  <span class="chip">{{ row.db_count }} DB{{ '' if row.db_count == 1 else 's' }}</span>
+                  <span class="chip path-chip mono" title="{{ row.data_dir }}">{{ row.data_dir }}</span>
+                </div>
+              </div>
+
+              <div class="site-stats">
+                <div class="size">{{ (row.files_bytes + row.dumps_bytes) | human_bytes }}</div>
+                <div class="when">
+                  {% if row.last_success %}
+                    {{ row.last_success.strftime('%d %b %Y') }}<br>{{ row.last_success.strftime('%H:%M') }}
+                  {% else %}
+                    Never completed
+                  {% endif %}
+                </div>
+              </div>
+
+              <div class="activity">
+                <div class="activity-top">
+                  <a class="pill {{ st.status }}" href="{{ url_for('account_live', account_id=a.id) }}" {% if st.tip %}title="{{ st.tip }}"{% endif %} style="text-decoration:none;">
+                    <span class="sym" aria-hidden="true">{{ st.icon }}</span>
+                    {{ st.label }}
+                  </a>
+                </div>
+                {% if live %}
+                  <div class="xfer" title="{{ lv.message }}">
+                    <div class="track"><i style="width: {{ lv.pct|int }}%;"></i></div>
+                    <div class="xfer-meta">
+                      {% if lv.phase == 'scanning' %}
+                        <span>Scanning <b>{{ lv.scanned | human_int }}</b> files</span>
+                      {% else %}
+                        <span><b>{{ lv.downloaded | human_int }}</b> downloaded</span>
+                        <span><b>{{ (lv.skipped or 0) | human_int }}</b> unchanged</span>
+                        <span><b>{{ lv.pct|int }}%</b></span>
+                      {% endif %}
+                    </div>
+                  </div>
+                {% elif st.tip %}
+                  <div class="tip" title="{{ st.tip }}">{{ st.tip }}</div>
+                {% endif %}
+              </div>
+
+              <div class="site-actions">
+                {% if live %}
+                  <form method="post" action="{{ url_for('stop_backup', account_id=a.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="next" value="index">
+                    <button class="btn btn-danger btn-go" type="submit" title="Stop this site’s backup process">Stop</button>
+                  </form>
+                {% else %}
+                  <form method="post" action="{{ url_for('run_backup', account_id=a.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="next" value="index">
+                    <button class="btn btn-primary btn-go" type="submit" title="Continues from where it left off — unchanged files are skipped">
+                      {% if attention or warn or (lv and not lv.live and lv.phase in ('failed', 'stale')) %}Resume{% else %}Start{% endif %}
+                    </button>
+                  </form>
+                {% endif %}
+                <div class="tools">
+                  <a href="{{ url_for('account_live', account_id=a.id) }}">Live</a>
+                  <span class="dot">·</span>
+                  <form method="post" action="{{ url_for('open_folder', account_id=a.id) }}" style="display:inline;margin:0;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button class="linkish" type="submit" title="Open backup folder in Explorer">Folder</button>
+                  </form>
+                  <span class="dot">·</span>
+                  <a href="{{ url_for('edit_account', account_id=a.id) }}">Edit</a>
+                  <span class="dot">·</span>
+                  <form method="post" action="{{ url_for('remove_account', account_id=a.id) }}" style="display:inline;margin:0;" onsubmit="return confirm('Remove {{ a.id }} from config? Data folder is kept.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <button class="linkish danger" type="submit">Remove</button>
+                  </form>
+                </div>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+  </div>
 {% endblock %}

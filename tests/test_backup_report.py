@@ -156,7 +156,7 @@ def test_backups_page_renders_and_validates(backup_home):
     resp = client.get("/backups?days=30")
     assert resp.status_code == 200
     html = resp.get_data(as_text=True)
-    assert "Backups by day" in html and "Coverage" in html and "Site" in html
+    assert "Backup calendar" in html and "Coverage" in html
     assert client.get("/backups?days=999").status_code == 200  # falls back to 30
     bad = client.get("/backups?account=../../etc")
     assert bad.status_code == 302  # rejected, redirected

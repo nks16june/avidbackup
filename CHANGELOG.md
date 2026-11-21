@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Security
+
+- UI sign-in on by default: a random token is generated on first run (`avidbackup token`); the launcher opens a fragment sign-in link
+- Host header allow-list (DNS-rebinding protection) and Origin check on all POSTs
+- Safe `next` redirects, login lockout, `SameSite=Strict` uniquely named session cookie, `Referrer-Policy: same-origin`
+- FTP restore to the server is now preview, then typed site ID, with a single-use expiring ticket and an audit log
+- Fonts are bundled (SIL OFL); the UI no longer contacts Google Fonts
+- Phone alerts are off by default; public ntfy.sh gets generic messages unless you opt in to details
+- Removed legacy third-party notifier integrations; notifications are now generic (ntfy, webhook, email)
+- Windows: the port check no longer treats a busy port as free (`SO_REUSEADDR`)
+
 ## [0.1.0] — 2026-10-31
 
 ### Added

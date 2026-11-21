@@ -9,6 +9,7 @@ from avidbackup.databases.base import DbDumper, DumpResult
 from avidbackup.databases.compress import maybe_gzip
 from avidbackup.mysql_config import (
     MysqlCredentials,
+    discover_all_mysql_credentials,
     discover_mysql_credentials,
     resolve_direct_host,
 )
@@ -23,18 +24,30 @@ class MysqlDumper(DbDumper):
     name = "mysql"
     type = "mysql"
 
+    def _should_discover(self) -> bool:
+        db = self.db
+        if not getattr(db, "discover_from_site", False):
+            return False
+        # Discover whenever user/database are incomplete (host alone is an override).
+        return not (db.user and db.database)
+
+    def _local_files_dir(self) -> Path | None:
+        path = getattr(self.settings, "local_files_dir", None)
+        return path if isinstance(path, Path) and path.is_dir() else None
+
     def _creds(self) -> MysqlCredentials:
         db = self.db
-        if db.discover_from_site and self.remote is not None and not (db.host and db.user and db.database):
+        if self._should_discover() and (self.remote is not None or self._local_files_dir()):
             discovered = discover_mysql_credentials(
-                self.remote,
+                self.remote,  # type: ignore[arg-type]
                 self.settings.remote_files_root,
                 self.settings.mysql_config_candidates,
                 profile=self.settings.mysql_profile,
+                local_files_dir=self._local_files_dir(),
             )
             host = resolve_direct_host(
                 discovered,
-                mysql_host_override=self.settings.mysql_host,
+                mysql_host_override=self.settings.mysql_host or (db.host or ""),
                 ftp_host=self.settings.host,
             )
             return MysqlCredentials(
@@ -76,9 +89,70 @@ class MysqlDumper(DbDumper):
         conn = pymysql.connect(**kwargs)
         conn.close()
 
+    def _attempts(self) -> list[MysqlCredentials]:
+        db = self.db
+        if self._should_discover() and (self.remote is not None or self._local_files_dir()):
+            found = discover_all_mysql_credentials(
+                self.remote,  # may be unused when local_files_dir hits first
+                self.settings.remote_files_root,
+                self.settings.mysql_config_candidates,
+                profile=self.settings.mysql_profile,
+                local_files_dir=self._local_files_dir(),
+            )
+            attempts: list[MysqlCredentials] = []
+            for discovered in found:
+                host = resolve_direct_host(
+                    discovered,
+                    mysql_host_override=self.settings.mysql_host or (db.host or ""),
+                    ftp_host=self.settings.host,
+                )
+                attempts.append(
+                    MysqlCredentials(
+                        host=host,
+                        port=self.settings.mysql_port or discovered.port,
+                        user=discovered.user,
+                        password=discovered.password,
+                        database=discovered.database,
+                        source_path=discovered.source_path,
+                        profile=discovered.profile,
+                    )
+                )
+            if attempts:
+                return attempts
+            raise FileNotFoundError(
+                "Could not discover MySQL credentials from website config files "
+                "(checked public_html/www candidates, local downloaded files, and deep scan)."
+            )
+        return [self._creds()]
+
     def dump(self, dest_dir: Path) -> DumpResult:
         dest_dir.mkdir(parents=True, exist_ok=True)
-        creds = self._creds()
+        try:
+            attempts = self._attempts()
+        except FileNotFoundError as exc:
+            log.error("%s", exc)
+            return DumpResult(failed=1, source=str(exc))
+        last_source = "no dump"
+        for index, creds in enumerate(attempts, start=1):
+            result = self._dump_one(creds, dest_dir)
+            if result.paths:
+                if index > 1:
+                    log.info(
+                        "Database dump used fallback config %s (%s)",
+                        creds.source_path,
+                        creds.database,
+                    )
+                return result
+            last_source = result.source or last_source
+            if index < len(attempts):
+                log.warning(
+                    "Dump failed for %s from %s — trying the next config",
+                    creds.database,
+                    creds.source_path,
+                )
+        return DumpResult(failed=1, source=last_source)
+
+    def _dump_one(self, creds: MysqlCredentials, dest_dir: Path) -> DumpResult:
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         local_path = dest_dir / f"{creds.database}_{stamp}.sql"
         result = self._mysqldump(creds, local_path)
@@ -87,7 +161,10 @@ class MysqlDumper(DbDumper):
         if result is None:
             return DumpResult(failed=1, source=f"{creds.host}/{creds.database}")
         path, size = result
-        path = maybe_gzip(path, getattr(self.db, "compress", None) or getattr(self.settings, "compress_dumps", "gzip"))
+        path = maybe_gzip(
+            path,
+            getattr(self.db, "compress", None) or getattr(self.settings, "compress_dumps", "gzip"),
+        )
         report = collect_table_sizes(creds, self.settings)
         return DumpResult(
             paths=[path],
@@ -119,6 +196,7 @@ class MysqlDumper(DbDumper):
                     "--hex-blob",
                     "--default-character-set=utf8mb4",
                     "--set-gtid-purged=OFF",
+                    "--connect-timeout=30",
                     creds.database,
                 ]
                 log.info("mysqldump → %s:%s db=%s", creds.host, creds.port, creds.database)

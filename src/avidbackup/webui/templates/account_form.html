@@ -1,154 +1,329 @@
 {% extends "base.html" %}
 {% block title %}{{ title }} · {{ brand }}{% endblock %}
+{% block page_title %}{{ title }}{% endblock %}
+{% block page_subtitle %}
+  <p class="hint">Website details, how you connect (FTP / SFTP / SSH), databases, and retention.</p>
+{% endblock %}
+{% block head %}
+<style>
+  .form-shell { max-width: 960px; }
+  .form-tabs {
+    display: flex; gap: 0.35rem; flex-wrap: wrap; margin: 0 0 1rem;
+    border-bottom: 1px solid var(--line); padding-bottom: 0.55rem;
+  }
+  .form-tabs button {
+    appearance: none; border: 1px solid transparent; background: transparent;
+    padding: 0.5rem 0.95rem; border-radius: 999px; font: inherit; font-weight: 700;
+    font-size: 0.88rem; color: var(--muted); cursor: pointer;
+  }
+  .form-tabs button:hover { color: var(--text); background: var(--panel-2); }
+  .form-tabs button.active {
+    color: #fff; background: var(--accent); border-color: var(--accent-deep);
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .access-modes {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem;
+    margin: 0.35rem 0 1rem;
+  }
+  @media (max-width: 720px) {
+    .access-modes { grid-template-columns: 1fr 1fr; }
+  }
+  .access-mode {
+    border: 1px solid var(--line); border-radius: 10px; padding: 0.75rem 0.8rem;
+    background: var(--panel-2); cursor: pointer; text-align: left;
+  }
+  .access-mode:hover { border-color: #9eb6d8; }
+  .access-mode.active {
+    border-color: var(--accent); background: var(--run-bg);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  .access-mode .t { font-weight: 700; font-size: 0.95rem; }
+  .access-mode .d { color: var(--muted); font-size: 0.78rem; margin-top: 0.2rem; line-height: 1.35; }
+  .proto-opts { display: none; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px dashed var(--line); }
+  .proto-opts.show { display: block; }
+  .mode-seg {
+    display: inline-flex; gap: 0.25rem; background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 999px; padding: 0.2rem;
+  }
+  .mode-seg button {
+    appearance: none; border: 0; background: transparent; border-radius: 999px;
+    padding: 0.4rem 0.85rem; font: inherit; font-weight: 700; font-size: 0.82rem;
+    color: var(--muted); cursor: pointer;
+  }
+  .mode-seg button.active { background: #fff; color: var(--text); box-shadow: var(--shadow); }
+  .db-block {
+    border: 1px solid var(--line); border-radius: 10px; padding: 1rem;
+    margin-top: 0.85rem; background: var(--panel);
+  }
+  .db-block .db-head {
+    display: flex; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;
+    align-items: center; margin-bottom: 0.65rem;
+  }
+  .db-block .db-title { font-weight: 700; }
+  .db-manual, .db-auto { display: none; }
+  .db-block[data-mode="manual"] .db-manual { display: block; }
+  .db-block[data-mode="auto"] .db-auto { display: block; }
+  .form-actions {
+    display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1.25rem;
+    padding-top: 1rem; border-top: 1px solid var(--line);
+  }
+  .callout {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    padding: 0.75rem 0.9rem; font-size: 0.88rem; color: var(--muted); margin: 0.5rem 0 0.85rem;
+  }
+  #discoverStatus { font-size: 0.85rem; }
+</style>
+{% endblock %}
 {% block body %}
-  <h1>{{ title }}</h1>
-  <form method="post" action="{{ url_for('save_account') }}" class="card" style="margin-top:1rem;" id="acctForm">
+  {% set proto = account.ftp.protocol if account else 'ftps' %}
+  {% if proto not in ['ftp', 'ftps', 'sftp', 'ssh'] %}{% set proto = 'ftps' %}{% endif %}
+  {% set dbs = account.databases if account and account.databases else [] %}
+
+  <form method="post" action="{{ url_for('save_account') }}" class="card form-shell" id="acctForm">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="id" value="{{ account.id if account else '' }}">
+    <input type="hidden" name="ftp_protocol" id="ftpProtocol" value="{{ proto }}">
 
-    <h2>Website</h2>
-    <div class="row">
-      <div>
-        <label>Label</label>
-        <input name="label" required value="{{ account.label if account else '' }}" placeholder="My site">
-      </div>
-      <div>
-        <label>Domain</label>
-        <input name="domain" value="{{ account.domain if account else '' }}" placeholder="example.com">
-      </div>
-      <div>
-        <label>Site URL</label>
-        <input name="site_url" value="{{ account.site_url if account else '' }}" placeholder="https://example.com">
-      </div>
-    </div>
-    <label class="check"><input type="checkbox" name="enabled" {% if not account or account.enabled %}checked{% endif %}> Enabled</label>
-
-    <h2>FTP / SFTP</h2>
-    <div class="row">
-      <div>
-        <label>Protocol</label>
-        <select name="ftp_protocol">
-          {% set proto = account.ftp.protocol if account else 'ftps' %}
-          <option value="ftps" {% if proto=='ftps' %}selected{% endif %}>FTPS (explicit TLS)</option>
-          <option value="ftp" {% if proto=='ftp' %}selected{% endif %}>FTP</option>
-          <option value="sftp" {% if proto=='sftp' %}selected{% endif %}>SFTP</option>
-        </select>
-      </div>
-      <div>
-        <label>Host</label>
-        <input name="ftp_host" required value="{{ account.ftp.host if account else '' }}" placeholder="ftp.example.com">
-      </div>
-      <div>
-        <label>Port</label>
-        <input type="number" name="ftp_port" value="{{ account.ftp.port if account else 21 }}">
-      </div>
-    </div>
-    <div class="row">
-      <div>
-        <label>User</label>
-        <input name="ftp_user" required value="{{ account.ftp.user if account else '' }}">
-      </div>
-      <div>
-        <label>Password</label>
-        <input type="password" name="ftp_password" value="" autocomplete="new-password" placeholder="•••• (leave blank to keep current)">
-      </div>
-      <div>
-        <label>Or password env var</label>
-        <input name="ftp_password_env" value="{{ account.ftp.password_env if account else '' }}" placeholder="AVIDBACKUP_FTP_PASS">
-      </div>
-      <div>
-        <label>Remote files root</label>
-        <input name="ftp_remote_root" value="{{ account.ftp.remote_root if account else '/public_html' }}">
-      </div>
-    </div>
-    <div class="row">
-      <label class="check"><input type="checkbox" name="ftp_tls" {% if not account or account.ftp.tls_explicit %}checked{% endif %}> TLS explicit (FTPS)</label>
-      <label class="check"><input type="checkbox" name="ftp_passive" {% if not account or account.ftp.passive %}checked{% endif %}> Passiveive mode</label>
-      <label class="check"><input type="checkbox" name="ftp_verify_tls" {% if not account or account.ftp.verify_tls %}checked{% endif %}> Verify FTPS certificate</label>
-      <div>
-        <label>SFTP host key policy</label>
-        {% set hkp = account.ftp.host_key_policy if account else 'tofu' %}
-        <select name="ftp_host_key_policy">
-          <option value="tofu" {% if hkp=='tofu' %}selected{% endif %}>tofu (trust on first use)</option>
-          <option value="strict" {% if hkp=='strict' %}selected{% endif %}>strict</option>
-          <option value="insecure" {% if hkp=='insecure' %}selected{% endif %}>insecure (not recommended)</option>
-        </select>
-      </div>
+    <div class="form-tabs" role="tablist" aria-label="Account sections">
+      <button type="button" class="active" data-tab="site" role="tab">1. Site</button>
+      <button type="button" data-tab="access" role="tab">2. Access</button>
+      <button type="button" data-tab="databases" role="tab">3. Databases</button>
+      <button type="button" data-tab="retention" role="tab">4. Retention</button>
     </div>
 
-    <h2>Databases <span class="muted">(optional · multiple · mysql / postgres / sqlite)</span></h2>
-    <div id="dbList">
-      {% set dbs = account.databases if account and account.databases else [] %}
-      {% for d in dbs %}
-        <div class="db-block" data-db>
-          <input type="hidden" name="db_id_{{ loop.index0 }}" value="{{ d.id }}">
-          <div class="row">
-            <div>
-              <label>Type</label>
-              <select name="db_type_{{ loop.index0 }}">
-                <option value="mysql" {% if d.type=='mysql' %}selected{% endif %}>MySQL / MariaDB</option>
-                <option value="postgres" {% if d.type=='postgres' %}selected{% endif %}>PostgreSQL</option>
-                <option value="sqlite" {% if d.type=='sqlite' %}selected{% endif %}>SQLite</option>
-              </select>
-            </div>
-            <div><label>Label</label><input name="db_label_{{ loop.index0 }}" value="{{ d.label }}"></div>
-            <div><label>Database name</label><input name="db_database_{{ loop.index0 }}" value="{{ d.database }}"></div>
-            <div><label>Host</label><input name="db_host_{{ loop.index0 }}" value="{{ d.host }}" placeholder="server IP"></div>
-            <div><label>Port</label><input type="number" name="db_port_{{ loop.index0 }}" value="{{ d.port }}"></div>
-          </div>
-          <div class="row">
-            <div><label>User</label><input name="db_user_{{ loop.index0 }}" value="{{ d.user }}"></div>
-            <div><label>Password</label><input type="password" name="db_password_{{ loop.index0 }}" value="" autocomplete="new-password" placeholder="•••• (leave blank to keep current)"></div>
-            <div><label>Or password env</label><input name="db_password_env_{{ loop.index0 }}" value="{{ d.password_env }}"></div>
-            <div><label>SQLite path</label><input name="db_path_{{ loop.index0 }}" value="{{ d.path }}" placeholder="/path/to/db.sqlite"></div>
-          </div>
-          <div class="row">
-            <div>
-              <label>Compress</label>
-              <select name="db_compress_{{ loop.index0 }}">
-                <option value="gzip" {% if d.compress=='gzip' %}selected{% endif %}>gzip</option>
-                <option value="none" {% if d.compress=='none' %}selected{% endif %}>none</option>
-              </select>
-            </div>
-            <div>
-              <label>Postgres format</label>
-              <select name="db_format_{{ loop.index0 }}">
-                <option value="plain" {% if d.format=='plain' %}selected{% endif %}>plain SQL</option>
-                <option value="custom" {% if d.format=='custom' %}selected{% endif %}>custom (-Fc)</option>
-              </select>
-            </div>
-            <label class="check"><input type="checkbox" name="db_enabled_{{ loop.index0 }}" {% if d.enabled %}checked{% endif %}> Enabled</label>
-            <label class="check"><input type="checkbox" name="db_discover_{{ loop.index0 }}" {% if d.discover_from_site %}checked{% endif %}> Discover MySQL from site config</label>
-            <label class="check"><input type="checkbox" name="db_ssl_{{ loop.index0 }}" {% if d.ssl %}checked{% endif %}> SSL / TLS (MySQL &amp; Postgres)</label>
+    <!-- SITE -->
+    <div class="tab-panel active" data-panel="site">
+      <h2 style="margin-top:0;">Website</h2>
+      <div class="row">
+        <div>
+          <label>Label</label>
+          <input name="label" required value="{{ account.label if account else '' }}" placeholder="My site">
+        </div>
+        <div>
+          <label>Domain</label>
+          <input name="domain" value="{{ account.domain if account else '' }}" placeholder="example.com">
+        </div>
+        <div>
+          <label>Site URL</label>
+          <input name="site_url" value="{{ account.site_url if account else '' }}" placeholder="https://example.com">
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" name="enabled" {% if not account or account.enabled %}checked{% endif %}> Enabled for scheduled / Backup all</label>
+    </div>
+
+    <!-- ACCESS -->
+    <div class="tab-panel" data-panel="access">
+      <h2 style="margin-top:0;">How do you connect?</h2>
+      <p class="hint" style="margin-top:0;">Pick the same method you use in FileZilla or cPanel. SSH uses SFTP under the hood (port 22).</p>
+
+      <div class="access-modes" id="accessModes">
+        <button type="button" class="access-mode {% if proto=='ftp' %}active{% endif %}" data-proto="ftp">
+          <div class="t">FTP</div>
+          <div class="d">Plain FTP · port 21 · shared hosts</div>
+        </button>
+        <button type="button" class="access-mode {% if proto=='ftps' %}active{% endif %}" data-proto="ftps">
+          <div class="t">FTPS</div>
+          <div class="d">FTP + TLS · recommended when available</div>
+        </button>
+        <button type="button" class="access-mode {% if proto=='sftp' %}active{% endif %}" data-proto="sftp">
+          <div class="t">SFTP</div>
+          <div class="d">SSH file transfer · port 22</div>
+        </button>
+        <button type="button" class="access-mode {% if proto=='ssh' %}active{% endif %}" data-proto="ssh">
+          <div class="t">SSH</div>
+          <div class="d">cPanel SSH login · files via SFTP</div>
+        </button>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Host</label>
+          <input name="ftp_host" id="ftpHost" required value="{{ account.ftp.host if account else '' }}" placeholder="ftp.example.com">
+        </div>
+        <div>
+          <label>Port</label>
+          <input type="number" name="ftp_port" id="ftpPort" value="{{ account.ftp.port if account else 21 }}">
+        </div>
+        <div>
+          <label>Username</label>
+          <input name="ftp_user" required value="{{ account.ftp.user if account else '' }}">
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label>Password</label>
+          <input type="password" name="ftp_password" value="" autocomplete="new-password" placeholder="•••• (leave blank to keep current)" spellcheck="false">
+          <div class="hint muted">Type exactly like FileZilla — no quotes. Special characters (<code>@ # &amp;</code>) are fine.</div>
+        </div>
+        <div>
+          <label>Or password env var</label>
+          <input name="ftp_password_env" value="{{ account.ftp.password_env if account else '' }}" placeholder="AVIDBACKUP_FTP_PASS">
+        </div>
+        <div>
+          <label>Remote root</label>
+          <input name="ftp_remote_root" value="{{ account.ftp.remote_root if account else '/' }}" placeholder="/">
+          <div class="hint muted">Default <code>/</code> = whole account home. Use <code>/public_html</code> for web files only.</div>
+        </div>
+      </div>
+
+      <div class="proto-opts {% if proto in ['ftp','ftps'] %}show{% endif %}" id="optsFtp" data-for="ftp ftps">
+        <strong style="font-size:0.85rem;">FTP / FTPS options</strong>
+        <div class="row">
+          <label class="check"><input type="checkbox" name="ftp_tls" id="ftpTls" {% if not account or account.ftp.tls_explicit or proto=='ftps' %}checked{% endif %}> TLS explicit (FTPS)</label>
+          <label class="check"><input type="checkbox" name="ftp_passive" id="ftpPassive" {% if not account or account.ftp.passive %}checked{% endif %}> Passiveive mode</label>
+          <label class="check"><input type="checkbox" name="ftp_verify_tls" id="ftpVerifyTls" {% if not account or account.ftp.verify_tls %}checked{% endif %}> Verify FTPS certificate</label>
+        </div>
+      </div>
+
+      <div class="proto-opts {% if proto in ['sftp','ssh'] %}show{% endif %}" id="optsSsh" data-for="sftp ssh">
+        <strong style="font-size:0.85rem;">SFTP / SSH options</strong>
+        <div class="row">
+          <div>
+            <label>Host key policy</label>
+            {% set hkp = account.ftp.host_key_policy if account else 'tofu' %}
+            <select name="ftp_host_key_policy">
+              <option value="tofu" {% if hkp=='tofu' %}selected{% endif %}>Trust on first use (recommended)</option>
+              <option value="strict" {% if hkp=='strict' %}selected{% endif %}>Strict (known hosts only)</option>
+              <option value="insecure" {% if hkp=='insecure' %}selected{% endif %}>Insecure (not recommended)</option>
+            </select>
           </div>
         </div>
-      {% endfor %}
-    </div>
-    <input type="hidden" name="db_count" id="dbCount" value="{{ dbs|length }}">
-    <p style="margin-top:0.75rem;"><button type="button" class="btn" id="addDb">+ Add database</button></p>
-
-    <h2>Retention</h2>
-    <div class="row">
-      <div>
-        <label>Database dumps keep (days)</label>
-        <input type="number" min="1" name="mysql_days" value="{{ account.retention.mysql_days if account else 15 }}">
+        <p class="callout" id="sshHint" style="{% if proto != 'ssh' %}display:none{% endif %}">
+          SSH access uses your cPanel/shell login. AvidBackup transfers files with <strong>SFTP</strong> on the same host and password (usually port 22). Shell tunnels for databases are a later option.
+        </p>
       </div>
-      <div>
-        <label>Files days (if not forever)</label>
-        <input type="number" min="0" name="files_days" value="{{ account.retention.files_days if account else 0 }}">
-      </div>
-    </div>
-    <label class="check"><input type="checkbox" name="files_forever" {% if not account or account.retention.files_forever %}checked{% endif %}> Keep website files forever</label>
 
-    <p style="margin-top:1.4rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+      <p style="margin:1rem 0 0; display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+        <button class="btn btn-primary" type="submit" formaction="{{ url_for('test_ftp_connection') }}" formmethod="post" name="test_ftp" value="1">Test connection</button>
+        <span class="hint muted">Uses the fields above (including a newly typed password). Does not save.</span>
+      </p>
+    </div>
+
+    <!-- DATABASES -->
+    <div class="tab-panel" data-panel="databases">
+      <h2 style="margin-top:0;">Databases <span class="muted" style="font-weight:600;font-size:0.85rem;">optional · MySQL / Postgres / SQLite</span></h2>
+      <div class="callout">
+        <strong>Auto-fetch</strong> reads <code>wp-config.php</code>, <code>.env</code>, and similar files over your FTP/SFTP login each backup.
+        <strong>Manual</strong> lets you type host, user, password, and database name yourself. You can mix both.
+      </div>
+      <p style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center; margin:0 0 0.75rem;">
+        <button type="button" class="btn btn-primary" id="fetchDbBtn">Fetch DB details from site</button>
+        <button type="button" class="btn" id="addDb">+ Add database</button>
+        <span id="discoverStatus" class="hint muted"></span>
+      </p>
+
+      <div id="dbList">
+        {% for d in dbs %}
+          {% set mode = 'auto' if d.discover_from_site else 'manual' %}
+          <div class="db-block" data-db data-mode="{{ mode }}">
+            <input type="hidden" name="db_id_{{ loop.index0 }}" value="{{ d.id }}">
+            <input type="hidden" name="db_discover_{{ loop.index0 }}" class="db-discover-flag" value="{{ 'on' if mode=='auto' else '' }}">
+            <div class="db-head">
+              <div class="db-title">Database {{ loop.index }}</div>
+              <div class="mode-seg" role="group" aria-label="Entry mode">
+                <button type="button" class="db-mode-btn {% if mode=='auto' %}active{% endif %}" data-mode="auto">Auto-fetch</button>
+                <button type="button" class="db-mode-btn {% if mode=='manual' %}active{% endif %}" data-mode="manual">Manual entry</button>
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <label>Type</label>
+                <select name="db_type_{{ loop.index0 }}">
+                  <option value="mysql" {% if d.type=='mysql' %}selected{% endif %}>MySQL / MariaDB</option>
+                  <option value="postgres" {% if d.type=='postgres' %}selected{% endif %}>PostgreSQL</option>
+                  <option value="sqlite" {% if d.type=='sqlite' %}selected{% endif %}>SQLite</option>
+                </select>
+              </div>
+              <div><label>Label</label><input name="db_label_{{ loop.index0 }}" value="{{ d.label }}"></div>
+              <label class="check"><input type="checkbox" name="db_enabled_{{ loop.index0 }}" {% if d.enabled %}checked{% endif %}> Enabled</label>
+            </div>
+
+            <div class="db-auto">
+              <p class="hint">Credentials are read from the site on each backup (wp-config, .env, …). Optional host override if remote MySQL needs the public hostname.</p>
+              <div class="row">
+                <div><label>Host override (optional)</label><input name="db_host_{{ loop.index0 }}" class="db-host-auto" value="{{ d.host }}" placeholder="Leave blank to use FTP host when config says localhost"></div>
+                <div><label>Port override</label><input type="number" name="db_port_{{ loop.index0 }}" class="db-port-auto" value="{{ d.port }}"></div>
+              </div>
+              <input type="hidden" name="db_database_{{ loop.index0 }}" class="db-database-auto" value="{{ d.database }}">
+              <input type="hidden" name="db_user_{{ loop.index0 }}" class="db-user-auto" value="{{ d.user }}">
+              <input type="hidden" name="db_password_{{ loop.index0 }}" class="db-password-auto" value="">
+              <input type="hidden" name="db_password_env_{{ loop.index0 }}" value="{{ d.password_env }}">
+              <input type="hidden" name="db_path_{{ loop.index0 }}" value="{{ d.path }}">
+              <input type="hidden" name="db_compress_{{ loop.index0 }}" value="{{ d.compress or 'gzip' }}">
+              <input type="hidden" name="db_format_{{ loop.index0 }}" value="{{ d.format or 'plain' }}">
+              <input type="hidden" name="db_ssl_{{ loop.index0 }}" value="{{ 'on' if d.ssl else '' }}">
+            </div>
+
+            <div class="db-manual">
+              <div class="row">
+                <div><label>Database name</label><input name="db_database_{{ loop.index0 }}" class="db-database-manual" value="{{ d.database }}" disabled></div>
+                <div><label>Host</label><input name="db_host_{{ loop.index0 }}" class="db-host-manual" value="{{ d.host }}" placeholder="server IP / hostname" disabled></div>
+                <div><label>Port</label><input type="number" name="db_port_{{ loop.index0 }}" class="db-port-manual" value="{{ d.port }}" disabled></div>
+              </div>
+              <div class="row">
+                <div><label>User</label><input name="db_user_{{ loop.index0 }}" class="db-user-manual" value="{{ d.user }}" disabled></div>
+                <div><label>Password</label><input type="password" name="db_password_{{ loop.index0 }}" class="db-password-manual" value="" autocomplete="new-password" placeholder="•••• (leave blank to keep current)" disabled></div>
+                <div><label>Or password env</label><input name="db_password_env_{{ loop.index0 }}" class="db-password-env-manual" value="{{ d.password_env }}" disabled></div>
+                <div><label>SQLite path</label><input name="db_path_{{ loop.index0 }}" class="db-path-manual" value="{{ d.path }}" placeholder="/path/to/db.sqlite" disabled></div>
+              </div>
+              <div class="row">
+                <div>
+                  <label>Compress</label>
+                  <select name="db_compress_{{ loop.index0 }}" class="db-compress-manual" disabled>
+                    <option value="gzip" {% if d.compress=='gzip' %}selected{% endif %}>gzip</option>
+                    <option value="none" {% if d.compress=='none' %}selected{% endif %}>none</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Postgres format</label>
+                  <select name="db_format_{{ loop.index0 }}" class="db-format-manual" disabled>
+                    <option value="plain" {% if d.format=='plain' %}selected{% endif %}>plain SQL</option>
+                    <option value="custom" {% if d.format=='custom' %}selected{% endif %}>custom (-Fc)</option>
+                  </select>
+                </div>
+                <label class="check"><input type="checkbox" name="db_ssl_{{ loop.index0 }}" class="db-ssl-manual" {% if d.ssl %}checked{% endif %} disabled> SSL / TLS</label>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+      <input type="hidden" name="db_count" id="dbCount" value="{{ dbs|length }}">
+    </div>
+
+    <!-- RETENTION -->
+    <div class="tab-panel" data-panel="retention">
+      <h2 style="margin-top:0;">Retention</h2>
+      <div class="row">
+        <div>
+          <label>Database dumps keep (days)</label>
+          <input type="number" min="1" name="mysql_days" value="{{ account.retention.mysql_days if account else 15 }}">
+        </div>
+        <div>
+          <label>Files days (if not forever)</label>
+          <input type="number" min="0" name="files_days" value="{{ account.retention.files_days if account else 0 }}">
+        </div>
+      </div>
+      <label class="check"><input type="checkbox" name="files_forever" {% if not account or account.retention.files_forever %}checked{% endif %}> Keep website files forever</label>
+    </div>
+
+    <div class="form-actions">
       <button class="btn btn-primary" type="submit">Save account</button>
       <a class="btn" href="{{ url_for('index') }}">Cancel</a>
-    </p>
+    </div>
   </form>
 
   <template id="dbTpl">
-    <div class="db-block" data-db>
+    <div class="db-block" data-db data-mode="auto">
       <input type="hidden" name="db_id_IDX" value="">
+      <input type="hidden" name="db_discover_IDX" class="db-discover-flag" value="on">
+      <div class="db-head">
+        <div class="db-title">Database NEW</div>
+        <div class="mode-seg" role="group" aria-label="Entry mode">
+          <button type="button" class="db-mode-btn active" data-mode="auto">Auto-fetch</button>
+          <button type="button" class="db-mode-btn" data-mode="manual">Manual entry</button>
+        </div>
+      </div>
       <div class="row">
         <div>
           <label>Type</label>
@@ -159,40 +334,258 @@
           </select>
         </div>
         <div><label>Label</label><input name="db_label_IDX" value=""></div>
-        <div><label>Database name</label><input name="db_database_IDX" value=""></div>
-        <div><label>Host</label><input name="db_host_IDX" value="" placeholder="server IP"></div>
-        <div><label>Port</label><input type="number" name="db_port_IDX" value="3306"></div>
-      </div>
-      <div class="row">
-        <div><label>User</label><input name="db_user_IDX" value=""></div>
-        <div><label>Password</label><input type="password" name="db_password_IDX" value="" autocomplete="new-password" placeholder="•••• (leave blank to keep current)"></div>
-        <div><label>Or password env</label><input name="db_password_env_IDX" value=""></div>
-        <div><label>SQLite path</label><input name="db_path_IDX" value=""></div>
-      </div>
-      <div class="row">
-        <div>
-          <label>Compress</label>
-          <select name="db_compress_IDX"><option value="gzip" selected>gzip</option><option value="none">none</option></select>
-        </div>
-        <div>
-          <label>Postgres format</label>
-          <select name="db_format_IDX"><option value="plain" selected>plain SQL</option><option value="custom">custom</option></select>
-        </div>
         <label class="check"><input type="checkbox" name="db_enabled_IDX" checked> Enabled</label>
-        <label class="check"><input type="checkbox" name="db_discover_IDX"> Discover MySQL from site config</label>
-        <label class="check"><input type="checkbox" name="db_ssl_IDX"> SSL / TLS (MySQL &amp; Postgres)</label>
+      </div>
+      <div class="db-auto">
+        <p class="hint">Credentials are read from the site on each backup. Optional host override below.</p>
+        <div class="row">
+          <div><label>Host override (optional)</label><input name="db_host_IDX" class="db-host-auto" value="" placeholder="Leave blank when config says localhost"></div>
+          <div><label>Port override</label><input type="number" name="db_port_IDX" class="db-port-auto" value="3306"></div>
+        </div>
+        <input type="hidden" name="db_database_IDX" class="db-database-auto" value="">
+        <input type="hidden" name="db_user_IDX" class="db-user-auto" value="">
+        <input type="hidden" name="db_password_IDX" class="db-password-auto" value="">
+        <input type="hidden" name="db_password_env_IDX" value="">
+        <input type="hidden" name="db_path_IDX" value="">
+        <input type="hidden" name="db_compress_IDX" value="gzip">
+        <input type="hidden" name="db_format_IDX" value="plain">
+        <input type="hidden" name="db_ssl_IDX" value="">
+      </div>
+      <div class="db-manual">
+        <div class="row">
+          <div><label>Database name</label><input name="db_database_IDX" class="db-database-manual" value="" disabled></div>
+          <div><label>Host</label><input name="db_host_IDX" class="db-host-manual" value="" placeholder="server IP / hostname" disabled></div>
+          <div><label>Port</label><input type="number" name="db_port_IDX" class="db-port-manual" value="3306" disabled></div>
+        </div>
+        <div class="row">
+          <div><label>User</label><input name="db_user_IDX" class="db-user-manual" value="" disabled></div>
+          <div><label>Password</label><input type="password" name="db_password_IDX" class="db-password-manual" value="" autocomplete="new-password" placeholder="••••" disabled></div>
+          <div><label>Or password env</label><input name="db_password_env_IDX" class="db-password-env-manual" value="" disabled></div>
+          <div><label>SQLite path</label><input name="db_path_IDX" class="db-path-manual" value="" disabled></div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Compress</label>
+            <select name="db_compress_IDX" class="db-compress-manual" disabled>
+              <option value="gzip" selected>gzip</option>
+              <option value="none">none</option>
+            </select>
+          </div>
+          <div>
+            <label>Postgres format</label>
+            <select name="db_format_IDX" class="db-format-manual" disabled>
+              <option value="plain" selected>plain SQL</option>
+              <option value="custom">custom</option>
+            </select>
+          </div>
+          <label class="check"><input type="checkbox" name="db_ssl_IDX" class="db-ssl-manual" disabled> SSL / TLS</label>
+        </div>
       </div>
     </div>
   </template>
+
   <script>
     (function () {
+      const form = document.getElementById('acctForm');
+      const protoInput = document.getElementById('ftpProtocol');
+      const portInput = document.getElementById('ftpPort');
+      const optsFtp = document.getElementById('optsFtp');
+      const optsSsh = document.getElementById('optsSsh');
+      const sshHint = document.getElementById('sshHint');
+      const ftpTls = document.getElementById('ftpTls');
+      const ftpPassive = document.getElementById('ftpPassive');
+      const ftpVerify = document.getElementById('ftpVerifyTls');
       const list = document.getElementById('dbList');
       const count = document.getElementById('dbCount');
       const tpl = document.getElementById('dbTpl').innerHTML;
-      document.getElementById('addDb').addEventListener('click', function () {
+      const csrf = form.querySelector('input[name="csrf_token"]').value;
+
+      function showTab(name) {
+        form.querySelectorAll('.form-tabs button').forEach(function (b) {
+          b.classList.toggle('active', b.getAttribute('data-tab') === name);
+        });
+        form.querySelectorAll('.tab-panel').forEach(function (p) {
+          p.classList.toggle('active', p.getAttribute('data-panel') === name);
+        });
+        if (history.replaceState) {
+          history.replaceState(null, '', '#' + name);
+        }
+      }
+
+      form.querySelectorAll('.form-tabs button').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          showTab(btn.getAttribute('data-tab'));
+        });
+      });
+
+      const hash = (location.hash || '').replace('#', '');
+      if (hash && form.querySelector('[data-panel="' + hash + '"]')) {
+        showTab(hash);
+      }
+
+      function setProtocol(proto) {
+        protoInput.value = proto;
+        document.querySelectorAll('#accessModes .access-mode').forEach(function (el) {
+          el.classList.toggle('active', el.getAttribute('data-proto') === proto);
+        });
+        const isFtp = proto === 'ftp' || proto === 'ftps';
+        const isSsh = proto === 'sftp' || proto === 'ssh';
+        optsFtp.classList.toggle('show', isFtp);
+        optsSsh.classList.toggle('show', isSsh);
+        sshHint.style.display = proto === 'ssh' ? '' : 'none';
+        if (isSsh) {
+          if (!portInput.dataset.touched) portInput.value = '22';
+        } else {
+          if (!portInput.dataset.touched) portInput.value = '21';
+        }
+        if (proto === 'ftps') {
+          ftpTls.checked = true;
+          ftpPassive.checked = true;
+          ftpVerify.checked = true;
+        } else if (proto === 'ftp') {
+          ftpTls.checked = false;
+          ftpPassive.checked = true;
+        }
+      }
+
+      portInput.addEventListener('input', function () { portInput.dataset.touched = '1'; });
+
+      document.querySelectorAll('#accessModes .access-mode').forEach(function (el) {
+        el.addEventListener('click', function () {
+          setProtocol(el.getAttribute('data-proto'));
+        });
+      });
+
+      function syncDbMode(block) {
+        const mode = block.getAttribute('data-mode') || 'manual';
+        const flag = block.querySelector('.db-discover-flag');
+        if (flag) flag.value = mode === 'auto' ? 'on' : '';
+        block.querySelectorAll('.db-mode-btn').forEach(function (b) {
+          b.classList.toggle('active', b.getAttribute('data-mode') === mode);
+        });
+        // Enable only the active mode's fields so duplicate names do not collide.
+        block.querySelectorAll('.db-auto input, .db-auto select').forEach(function (el) {
+          el.disabled = mode !== 'auto';
+        });
+        block.querySelectorAll('.db-manual input, .db-manual select').forEach(function (el) {
+          el.disabled = mode !== 'manual';
+        });
+        // discover flag must always submit
+        if (flag) flag.disabled = false;
+      }
+
+      function bindDbBlock(block) {
+        block.querySelectorAll('.db-mode-btn').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            block.setAttribute('data-mode', btn.getAttribute('data-mode'));
+            syncDbMode(block);
+          });
+        });
+        syncDbMode(block);
+      }
+
+      list.querySelectorAll('[data-db]').forEach(bindDbBlock);
+
+      function addDbBlock(prefill) {
         const i = Number(count.value || 0);
-        list.insertAdjacentHTML('beforeend', tpl.replaceAll('IDX', String(i)));
+        list.insertAdjacentHTML('beforeend', tpl.replaceAll('IDX', String(i)).replace('Database NEW', 'Database ' + (i + 1)));
         count.value = String(i + 1);
+        const block = list.lastElementChild;
+        if (prefill) {
+          block.setAttribute('data-mode', prefill.mode || 'manual');
+          const set = function (sel, val) {
+            const el = block.querySelector(sel);
+            if (el && val != null) el.value = val;
+          };
+          set('select[name^="db_type_"]', prefill.type || 'mysql');
+          set('input[name^="db_label_"]', prefill.label || prefill.database || '');
+          set('.db-database-manual', prefill.database || '');
+          set('.db-host-manual', prefill.host || '');
+          set('.db-port-manual', String(prefill.port || 3306));
+          set('.db-user-manual', prefill.user || '');
+          set('.db-password-manual', prefill.password || '');
+          set('.db-host-auto', prefill.host || '');
+          set('.db-port-auto', String(prefill.port || 3306));
+          set('.db-database-auto', prefill.database || '');
+          set('.db-user-auto', prefill.user || '');
+          set('.db-password-auto', prefill.password || '');
+          if (prefill.source_path) {
+            const hint = document.createElement('p');
+            hint.className = 'hint';
+            hint.textContent = 'Found in ' + prefill.source_path;
+            block.querySelector('.db-head').after(hint);
+          }
+        }
+        bindDbBlock(block);
+        return block;
+      }
+
+      document.getElementById('addDb').addEventListener('click', function () {
+        addDbBlock({ mode: 'manual' });
+        showTab('databases');
+      });
+
+      document.getElementById('fetchDbBtn').addEventListener('click', async function () {
+        const status = document.getElementById('discoverStatus');
+        status.textContent = 'Scanning site config…';
+        status.className = 'hint muted';
+        const fd = new FormData(form);
+        try {
+          const res = await fetch('{{ url_for("discover_db_from_site") }}', {
+            method: 'POST',
+            body: fd,
+            headers: {
+              'X-CSRF-Token': csrf,
+              'X-Requested-With': 'fetch',
+              'Accept': 'application/json'
+            }
+          });
+          const data = await res.json();
+          if (!data.ok) {
+            status.textContent = data.error || 'Fetch failed';
+            status.className = 'hint bad';
+            return;
+          }
+          if (!data.found || !data.found.length) {
+            status.textContent = 'No MySQL credentials found in common config files.';
+            status.className = 'hint bad';
+            return;
+          }
+          // Replace empty list or append discovered DBs as manual (editable) entries.
+          if (Number(count.value || 0) === 0) {
+            list.innerHTML = '';
+            count.value = '0';
+          }
+          data.found.forEach(function (row) {
+            addDbBlock({
+              mode: 'manual',
+              type: 'mysql',
+              label: row.label || row.database,
+              database: row.database,
+              host: row.host,
+              port: row.port,
+              user: row.user,
+              // Password stays server-side from Fetch; Save merges it.
+              password: '',
+              source_path: row.source_path
+            });
+          });
+          status.textContent = 'Loaded ' + data.found.length + ' database(s). Passwords kept on this PC — review and Save.';
+          status.className = 'hint ok';
+          showTab('databases');
+        } catch (err) {
+          status.textContent = 'Fetch failed: ' + (err && err.message ? err.message : err);
+          status.className = 'hint bad';
+        }
+      });
+
+      // Fix discover flag: checkboxes historically used name=db_discover_i; we use hidden value on/off.
+      // save_account checks == "on" — good.
+
+      // Before submit, ensure disabled fields in inactive mode are not the only ones —
+      // already handled by enabling active pane only. Also convert discover hidden for auto.
+      form.addEventListener('submit', function () {
+        list.querySelectorAll('[data-db]').forEach(syncDbMode);
       });
     })();
   </script>

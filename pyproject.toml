@@ -46,9 +46,9 @@ dev = ["pytest>=7.0", "ruff>=0.6", "build", "wheel"]
 
 [project.urls]
 Homepage = "https://avidwebsolutions.in"
-Documentation = "https://github.com/avidwebsolutions/avidbackup#readme"
-Repository = "https://github.com/avidwebsolutions/avidbackup"
-Issues = "https://github.com/avidwebsolutions/avidbackup/issues"
+Documentation = "https://github.com/nks16june/avidbackup#readme"
+Repository = "https://github.com/nks16june/avidbackup"
+Issues = "https://github.com/nks16june/avidbackup/issues"
 "Avid ERP" = "https://aviderp.com"
 
 [project.scripts]
@@ -61,7 +61,7 @@ version = { attr = "avidbackup.__version__" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-avidbackup = ["webui/templates/*.html", "webui/static/*", "data/*.json"]
+avidbackup = ["webui/templates/*.html", "webui/static/*", "webui/static/fonts/*", "data/*.json"]
 
 [tool.ruff]
 line-length = 100

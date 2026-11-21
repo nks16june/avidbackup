@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}{{ account.label }} · {{ day }} · Restore · {{ brand }}{% endblock %}
+{% block page_title %}Restore · {{ day }}{% endblock %}
+{% block page_subtitle %}
+  <p class="hint">
+    {{ account.label }} · download locally or restore website files over the same FTP
+    {% if snap and snap.files_updated %}· <strong>{{ snap.files_updated }}</strong> files updated this day{% endif %}
+  </p>
+{% endblock %}
+{% block top_actions %}
+  <a class="btn" href="{{ url_for('backups', account=account.id, days=days) }}">← {{ account.label }} calendar</a>
+  <a class="btn" href="{{ url_for('account_live', account_id=account.id) }}">Live</a>
+  <form method="post" action="{{ url_for('open_day_folder', account_id=account.id, day=day) }}" style="margin:0">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="kind" value="{{ tab }}">
+    <input type="hidden" name="path" value="{{ rel }}">
+    <button class="btn" type="submit">Open in Explorer</button>
+  </form>
+{% endblock %}
+{% block head %}
+<style>
+  .restore-head {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.7rem; margin-bottom: 1rem;
+  }
+  .rh {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 0.75rem 0.9rem; box-shadow: var(--shadow);
+  }
+  .rh .k { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .rh .v { font-size: 1.15rem; font-weight: 700; margin-top: 0.15rem; }
+  .tabs {
+    display: flex; gap: 0.35rem; margin-bottom: 0.85rem; flex-wrap: wrap;
+  }
+  .tabs a {
+    padding: 0.5rem 0.95rem; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); font-weight: 700; font-size: 0.88rem;
+    text-decoration: none;
+  }
+  .tabs a:hover { text-decoration: none; border-color: #b7c5d8; }
+  .tabs a.active { background: var(--accent); border-color: var(--accent-deep); color: #fff; }
+  .crumbs {
+    display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center;
+    margin-bottom: 0.75rem; font-size: 0.88rem;
+  }
+  .crumbs a { font-weight: 600; }
+  .crumbs .sep { color: var(--muted); }
+  .browser {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow); overflow: hidden;
+  }
+  .browser table { width: 100%; border-collapse: collapse; }
+  .browser th, .browser td {
+    text-align: left; padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--line);
+    font-size: 0.9rem; vertical-align: middle;
+  }
+  .browser th {
+    background: var(--panel-2); color: var(--muted); font-size: 0.75rem;
+    text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700;
+  }
+  .browser tr:last-child td { border-bottom: 0; }
+  .browser tr:hover td { background: #f8fafc; }
+  .ico {
+    display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem;
+    border-radius: 6px; margin-right: 0.45rem; font-size: 0.85rem;
+    background: #eef2f7; color: var(--muted); vertical-align: middle;
+  }
+  .ico.dir { background: #e6f1fb; color: var(--run); }
+  .ico.dump { background: var(--ok-bg); color: var(--ok); }
+  .name-link { font-weight: 600; color: var(--text); text-decoration: none; }
+  .name-link:hover { color: var(--accent); text-decoration: underline; }
+  .empty-pane { padding: 2rem 1rem; text-align: center; color: var(--muted); }
+  .day-rail {
+    display: flex; gap: 0.35rem; overflow-x: auto; padding-bottom: 0.35rem; margin-bottom: 1rem;
+  }
+  .day-chip {
+    flex: none; padding: 0.4rem 0.7rem; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--panel); font-size: 0.8rem; font-weight: 600; text-decoration: none; color: var(--text);
+  }
+  .day-chip:hover { text-decoration: none; border-color: #b7c5d8; }
+  .day-chip.active { background: var(--accent); border-color: var(--accent-deep); color: #fff; }
+  .actions-inline { display: flex; gap: 0.3rem; flex-wrap: wrap; justify-content: flex-end; }
+</style>
+{% endblock %}
+{% block body %}
+  {% if other_days %}
+  <div class="day-rail" aria-label="Other restore days">
+    {% for d in other_days[:40] %}
+      <a class="day-chip {% if d == day %}active{% endif %}" href="{{ url_for('restore_day', account_id=account.id, day=d, tab=tab) }}">{{ d }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="restore-head">
+    <div class="rh">
+      <div class="k">Restore point</div>
+      <div class="v" style="font-size:1rem;">{{ day }}</div>
+    </div>
+    <div class="rh">
+      <div class="k">Website files</div>
+      <div class="v">{{ snap.files_count if snap else 0 }}</div>
+      <div class="hint">{{ (snap.files_bytes if snap else 0) | human_bytes }} on disk</div>
+    </div>
+    <div class="rh">
+      <div class="k">Database dumps</div>
+      <div class="v">{{ (snap.dumps|length) if snap else 0 }}</div>
+      <div class="hint">Download only — DB import stays separate</div>
+    </div>
+    <div class="rh">
+      <div class="k">FTP target</div>
+      <div class="v" style="font-size:0.85rem;">{{ account.ftp.user }}@{{ account.ftp.host }}</div>
+      <div class="hint">Same account used for backup</div>
+    </div>
+  </div>
+
+  {% if tab == 'files' and snap and snap.has_files %}
+  <div class="card" id="ftp-restore" style="margin-bottom:1rem;">
+    <strong>Restore files via FTP</strong>
+    <p class="hint" style="margin:0.35rem 0 0.75rem;">
+      Pushes this day’s local snapshot back to the server over the same FTP/SFTP login, keeping the exact folder hierarchy
+      (<code>public_html/</code>, <code>app/</code>, …).{% if rel %} Currently scoped to <code>{{ rel }}</code>.{% endif %}
+    </p>
+    <form method="post" action="{{ url_for('restore_ftp_preview', account_id=account.id, day=day) }}"
+          style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:end;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="path" value="{{ rel }}">
+      <button class="btn btn-primary" type="submit">Preview restore to server…</button>
+      <span class="hint">You will see exactly what is uploaded before anything is sent.</span>
+    </form>
+    <p class="hint" style="margin:0.65rem 0 0;">
+      To download: open a file below and use <strong>Download</strong>, or use <strong>Open in Explorer</strong> for the whole folder.
+      Database dumps are download-only (import separately).
+    </p>
+  </div>
+  {% endif %}
+
+  <div class="tabs" role="tablist">
+    <a class="{% if tab == 'files' %}active{% endif %}" href="{{ url_for('restore_day', account_id=account.id, day=day, tab='files') }}">Files</a>
+    <a class="{% if tab == 'db' %}active{% endif %}" href="{{ url_for('restore_day', account_id=account.id, day=day, tab='db') }}">Databases</a>
+  </div>
+
+  {% if tab == 'files' %}
+    <nav class="crumbs" aria-label="Path">
+      <a href="{{ url_for('restore_day', account_id=account.id, day=day, tab='files') }}">files</a>
+      {% set acc = '' %}
+      {% for part in crumbs %}
+        {% set acc = acc + ('/' if acc else '') + part %}
+        <span class="sep">/</span>
+        {% if loop.last %}
+          <span>{{ part }}</span>
+        {% else %}
+          <a href="{{ url_for('restore_day', account_id=account.id, day=day, tab='files', path=acc) }}">{{ part }}</a>
+        {% endif %}
+      {% endfor %}
+    </nav>
+
+    <div class="browser">
+      {% if not snap or not snap.has_files %}
+        <div class="empty-pane">No files folder for this day yet. Run a backup first.</div>
+      {% elif not entries and rel %}
+        <div class="empty-pane">This folder is empty.</div>
+      {% elif not entries %}
+        <div class="empty-pane">No files in this snapshot yet.</div>
+      {% else %}
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Size</th><th>Modified</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% if rel %}
+              {% set parent = '/'.join(crumbs[:-1]) if crumbs|length > 1 else '' %}
+              <tr>
+                <td colspan="4">
+                  <a class="name-link" href="{{ url_for('restore_day', account_id=account.id, day=day, tab='files', path=parent) }}">
+                    <span class="ico dir">↑</span> Parent folder
+                  </a>
+                </td>
+              </tr>
+            {% endif %}
+            {% for e in entries %}
+              <tr>
+                <td>
+                  {% if e.is_dir %}
+                    <a class="name-link" href="{{ url_for('restore_day', account_id=account.id, day=day, tab='files', path=e.rel) }}">
+                      <span class="ico dir">DIR</span>{{ e.name }}
+                    </a>
+                  {% else %}
+                    <span class="ico">FILE</span>{{ e.name }}
+                  {% endif %}
+                </td>
+                <td class="muted">{% if e.is_dir %}—{% else %}{{ e.size | human_bytes }}{% endif %}</td>
+                <td class="muted mono">{% if e.mtime %}{{ e.mtime.strftime('%d %b %Y %H:%M') }}{% else %}—{% endif %}</td>
+                <td>
+                  <div class="actions-inline">
+                    {% if e.is_dir %}
+                      <a class="btn btn-sm" href="{{ url_for('restore_day', account_id=account.id, day=day, tab='files', path=e.rel) }}">Open</a>
+                    {% else %}
+                      <a class="btn btn-sm btn-primary" href="{{ url_for('download_restore', account_id=account.id, day=day, kind='files', path=e.rel) }}">Download</a>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    </div>
+  {% else %}
+    <div class="browser">
+      {% if not snap or not snap.dumps %}
+        <div class="empty-pane">
+          <p>No database dumps for this day (checked day folder and legacy <code>mysql/</code>). File backups may still be available under Files.</p>
+          {% if db_empty_tip %}
+            <p class="bad" style="margin:0.75rem auto 0;max-width:36rem;text-align:left;">{{ db_empty_tip }}</p>
+          {% endif %}
+        </div>
+      {% else %}
+        <table>
+          <thead>
+            <tr><th>Dump</th><th>Size</th><th>Created</th><th>Checksum</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for d in snap.dumps %}
+              <tr>
+                <td><span class="ico dump">DB</span><span class="mono">{{ d.name }}</span></td>
+                <td>{{ d.size | human_bytes }}</td>
+                <td class="mono muted">{{ d.mtime.strftime('%d %b %Y %H:%M') }}</td>
+                <td class="{% if d.checksum %}ok{% else %}muted{% endif %}">{% if d.checksum %}✓ sha256{% else %}—{% endif %}</td>
+                <td>
+                  <a class="btn btn-sm btn-primary" href="{{ url_for('download_restore', account_id=account.id, day=day, kind='db', path=d.name) }}">Download</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+    </div>
+    <p class="hint" style="margin-top:0.75rem;">To restore a dump into MySQL/Postgres, use <code>avidbackup restore-db --account {{ account.id }} --db &lt;id&gt; --file …</code> (dry-run by default). Prefer a staging database.</p>
+  {% endif %}
+{% endblock %}

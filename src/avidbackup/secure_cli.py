@@ -83,6 +83,21 @@ def pgpass_file(
             pass
 
 
+def normalize_password(value: str) -> str:
+    """
+    Keep special characters (@ # & ~ etc.) exactly.
+
+    Do not require quotes. If the UI paste is wrapped in matching quotes
+    (people sometimes type 'pass&word' thinking a shell needs them), unwrap
+    one layer only.
+    """
+    if not value:
+        return ""
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
 def resolve_secret(literal: str, env_name: str = "") -> str:
     """Prefer password_env when set; otherwise use the literal password."""
     name = (env_name or "").strip()
@@ -90,5 +105,5 @@ def resolve_secret(literal: str, env_name: str = "") -> str:
         val = os.environ.get(name)
         if val is None or val == "":
             raise ValueError(f"Environment variable {name!r} is not set for password_env")
-        return val
-    return literal or ""
+        return normalize_password(val)
+    return normalize_password(literal or "")

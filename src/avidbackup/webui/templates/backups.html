@@ -1,77 +1,139 @@
 {% extends "base.html" %}
-{% block title %}Backups · {{ brand }}{% endblock %}
+{% block title %}Backup calendar · {{ brand }}{% endblock %}
+{% block page_title %}{% if selected %}{{ selected.label }} · Restore points{% else %}Backup calendar{% endif %}{% endblock %}
+{% block page_subtitle %}
+  <p class="hint">
+    {% if selected %}
+      Separate <strong>Files</strong> and <strong>Database</strong> health · day-wise updates · download or restore over FTP.
+    {% else %}
+      Pick an account for restore points, or scan coverage across all sites.
+    {% endif %}
+  </p>
+{% endblock %}
+{% block top_actions %}
+  <form method="get" class="filters" style="display:flex;gap:0.45rem;flex-wrap:wrap;align-items:center;">
+    <select name="account" onchange="this.form.submit()" aria-label="Account" style="width:auto;">
+      <option value="">All accounts</option>
+      {% for a in accounts %}<option value="{{ a.id }}" {% if a.id == account %}selected{% endif %}>{{ a.label }}</option>{% endfor %}
+    </select>
+    <input type="hidden" name="days" value="{{ days }}">
+    <span class="seg" style="display:inline-flex;gap:0.25rem;">
+      {% for n in (7, 30, 90) %}
+        <a class="btn btn-sm {% if n == days %}btn-primary{% endif %}" href="{{ url_for('backups', days=n, account=account or None) }}">{{ n }}d</a>
+      {% endfor %}
+    </span>
+  </form>
+{% endblock %}
 {% block head %}
 <style>
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.75rem; margin: 1rem 0; }
-  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 0.85rem 1rem; }
-  .stat .k { color: var(--muted); font-size: 0.8rem; }
-  .stat .v { font-size: 1.45rem; font-weight: 700; margin-top: 0.15rem; }
-  .stat .s { color: var(--muted); font-size: 0.8rem; margin-top: 0.1rem; }
-  .filters { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
-  .filters select { width: auto; }
-  .seg a { padding: 0.35rem 0.7rem; }
-  .seg a.on { background: #1d4a35; border-color: var(--accent); }
-  .matrix { overflow-x: auto; padding-bottom: 0.4rem; }
-  .mrow { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem; min-width: max-content; }
-  .mlabel { width: 150px; flex: none; font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cells { display: flex; gap: 3px; }
-  .cell { width: 15px; height: 22px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.62rem; line-height: 1; border: 1px solid transparent; }
-  .cell.ok { background: #1d4a35; border-color: var(--ok); color: #b7efd0; }
-  .cell.warn { background: #3a3018; border-color: var(--accent2); color: #f0dca0; }
-  .cell.fail { background: #3a1c1c; border-color: var(--bad); color: #ffc9c9; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin: 0 0 1.1rem; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.85rem 1rem; box-shadow: var(--shadow); }
+  .stat .k { color: var(--muted); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat .v { font-size: 1.35rem; font-weight: 700; margin-top: 0.15rem; letter-spacing: -0.02em; }
+  .stat .s { color: var(--muted); font-size: 0.8rem; margin-top: 0.15rem; }
+  .acct-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; }
+  .acct-card {
+    display: block; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 1rem 1.05rem; box-shadow: var(--shadow); text-decoration: none; color: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .acct-card:hover { border-color: #9eb6d8; box-shadow: 0 8px 28px rgba(15,23,36,0.08); text-decoration: none; color: inherit; }
+  .acct-card .name { font-weight: 700; font-size: 1.02rem; }
+  .acct-card .meta { color: var(--muted); font-size: 0.82rem; margin-top: 0.2rem; }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 0.45rem; margin-top: 0.75rem; }
+  .split .box {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 0.55rem 0.65rem;
+  }
+  .split .box .lab { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .split .box .val { font-weight: 700; font-size: 0.92rem; margin-top: 0.15rem; }
+  .acct-card .cta { margin-top: 0.75rem; font-size: 0.82rem; font-weight: 700; color: var(--accent); }
+  .matrix { overflow-x: auto; padding-bottom: 0.35rem; }
+  .mblock { margin-bottom: 0.85rem; min-width: max-content; }
+  .mhead { display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.3rem; }
+  .mhead .name { font-weight: 700; font-size: 0.92rem; min-width: 150px; }
+  .mhead .name a { color: inherit; text-decoration: none; }
+  .mhead .name a:hover { color: var(--accent); text-decoration: underline; }
+  .mrow { display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.22rem; }
+  .mlabel { width: 150px; flex: none; font-size: 0.78rem; color: var(--muted); font-weight: 650; padding-left: 0.15rem; }
+  .cells { display: flex; gap: 3px; align-items: center; }
+  .cell {
+    width: 15px; height: 20px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 0.58rem; line-height: 1; border: 1px solid transparent; text-decoration: none; color: inherit;
+    position: relative;
+  }
+  .cell .upd {
+    position: absolute; bottom: -1px; right: -1px; font-size: 0.5rem; font-weight: 700;
+    background: var(--accent); color: #fff; border-radius: 3px; padding: 0 2px; line-height: 1.1;
+    min-width: 0.7rem; text-align: center;
+  }
+  a.cell:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .cell.ok { background: var(--ok-bg); border-color: #b7e4c7; color: var(--ok); }
+  .cell.warn { background: var(--warn-bg); border-color: #f0d78c; color: var(--warn); }
+  .cell.fail { background: var(--bad-bg); border-color: #f0b6b0; color: var(--bad); }
   .cell.missed { background: transparent; border: 1px dashed var(--bad); color: var(--bad); }
-  .cell.running { background: #1b2f3d; border-color: #5aa0d0; color: #bfe0f5; }
-  .cell.na { background: #101b17; border-color: #1a2b26; color: #3b524a; }
-  .legend { display: flex; flex-wrap: wrap; gap: 0.9rem; font-size: 0.8rem; color: var(--muted); margin-top: 0.6rem; align-items: center; }
-  .legend .cell { width: 15px; height: 15px; vertical-align: middle; margin-right: 0.3rem; }
-  details.day { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 0.5rem; }
+  .cell.running { background: var(--run-bg); border-color: #b5d4f6; color: var(--run); }
+  .cell.na { background: #eef2f7; border-color: var(--line); color: #9aa8bc; }
+  .legend { display: flex; flex-wrap: wrap; gap: 0.85rem; font-size: 0.8rem; color: var(--muted); margin-top: 0.7rem; align-items: center; }
+  .legend .cell { width: 15px; height: 15px; margin-right: 0.3rem; }
+  .rp-table { width: 100%; border-collapse: separate; border-spacing: 0; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  .rp-table th, .rp-table td { text-align: left; padding: 0.75rem 0.9rem; border-bottom: 1px solid var(--line); font-size: 0.9rem; vertical-align: middle; }
+  .rp-table th { background: var(--panel-2); color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .rp-table tr:last-child td { border-bottom: 0; }
+  .rp-table tr:hover td { background: #f8fafc; }
+  .rp-actions { display: flex; gap: 0.35rem; flex-wrap: wrap; justify-content: flex-end; }
+  details.day { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 0.5rem; box-shadow: var(--shadow); }
   details.day > summary { cursor: pointer; padding: 0.7rem 0.9rem; display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap; list-style: none; }
   details.day > summary::-webkit-details-marker { display: none; }
   details.day > summary::before { content: "▸"; color: var(--muted); }
   details.day[open] > summary::before { content: "▾"; }
   details.day.empty > summary { cursor: default; }
   details.day.empty > summary::before { content: "·"; }
-  .dname { font-weight: 600; min-width: 11.5rem; }
-  .pill { font-size: 0.75rem; padding: 0.1rem 0.5rem; border-radius: 999px; border: 1px solid; }
-  .pill.ok { color: var(--ok); border-color: var(--ok); }
-  .pill.warn { color: var(--accent2); border-color: var(--accent2); }
-  .pill.fail, .pill.missed { color: var(--bad); border-color: var(--bad); }
-  .pill.running { color: #5aa0d0; border-color: #5aa0d0; }
+  .dname { font-weight: 700; min-width: 11.5rem; }
   .dsum { color: var(--muted); font-size: 0.85rem; }
   .dbody { padding: 0 0.9rem 0.9rem; }
-  .dbody table { margin-top: 0.4rem; }
-  .dbody h3 { font-size: 0.85rem; color: var(--muted); margin: 0.8rem 0 0.2rem; font-weight: 600; }
+  .dbody table { margin-top: 0.4rem; width: 100%; border-collapse: collapse; }
+  .dbody th, .dbody td { text-align: left; padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--line); font-size: 0.88rem; }
+  .section-title { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; margin: 1.35rem 0 0.65rem; }
+  .section-title h2 { margin: 0; }
+  .twin { display: inline-flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
 </style>
 {% endblock %}
 {% block body %}
   {% set sym = {'ok': '✓', 'warn': '!', 'fail': '✕', 'missed': '○', 'running': '…', 'na': ''} %}
-  {% set word = {'ok': 'Backed up', 'warn': 'Failed once, then succeeded', 'fail': 'Failed', 'missed': 'No backup ran', 'running': 'Running', 'na': 'Before first backup'} %}
-  {% set rword = {'success': '✓ Success', 'failed': '✕ Failed', 'running': '… Running', 'interrupted': '✕ Interrupted'} %}
-  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:1rem;flex-wrap:wrap;">
-    <div>
-      <h1>Backups by day</h1>
-      <p class="muted" style="margin:0;">What was backed up, when, and which days have no backup. Times are in your local time zone.</p>
-    </div>
-    <form method="get" class="filters">
-      <select name="account" onchange="this.form.submit()" aria-label="Account">
-        <option value="">All accounts</option>
-        {% for a in accounts %}<option value="{{ a.id }}" {% if a.id == account %}selected{% endif %}>{{ a.label }}</option>{% endfor %}
-      </select>
-      <input type="hidden" name="days" value="{{ days }}">
-      <span class="seg">
-        {% for n in (7, 30, 90) %}
-          <a class="btn {% if n == days %}on{% endif %}" href="{{ url_for('backups', days=n, account=account or None) }}">{{ n }} days</a>
-        {% endfor %}
-      </span>
-    </form>
-  </div>
+  {% set word = {'ok': 'OK', 'warn': 'Partial', 'fail': 'Failed', 'missed': 'None', 'running': 'Running', 'na': '—'} %}
+  {% set rword = {'success': '✓ Success', 'partial': '! Partial', 'failed': '✕ Failed', 'running': '… Running', 'interrupted': '✕ Interrupted'} %}
 
   {% if not report.accounts %}
-    <div class="card" style="margin-top:1rem;">
+    <div class="card">
       <p>No backups to show yet.</p>
       <a class="btn btn-primary" href="{{ url_for('new_account') }}">Add your first website</a>
     </div>
   {% else %}
+
+    {% if not selected %}
+      <div class="acct-grid">
+        {% for acct in report.accounts %}
+          <a class="acct-card" href="{{ url_for('backups', account=acct.account_id, days=days) }}">
+            <div class="name">{{ acct.label }}</div>
+            <div class="meta mono">{{ acct.account_id }}</div>
+            <div class="split">
+              <div class="box">
+                <div class="lab">Files</div>
+                <div class="val">{{ acct.files_bytes | human_bytes }}</div>
+                <div class="meta">{% if acct.last_files_ok %}OK {{ acct.last_files_ok.strftime('%d %b') }}{% else %}No success{% endif %}</div>
+              </div>
+              <div class="box">
+                <div class="lab">Databases</div>
+                <div class="val">{{ acct.dumps_bytes | human_bytes }}</div>
+                <div class="meta">{% if acct.last_db_ok %}OK {{ acct.last_db_ok.strftime('%d %b') }}{% else %}No dump{% endif %}</div>
+              </div>
+            </div>
+            <div class="cta">Open restore points →</div>
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+
     <div class="stats">
       <div class="stat">
         <div class="k">Last successful backup</div>
@@ -79,33 +141,59 @@
         <div class="s">{% if report.last_success %}{{ (report.today - report.last_success.date()).days }} day(s) ago{% else %}Run a backup to get started{% endif %}</div>
       </div>
       <div class="stat">
-        <div class="k">Days covered (last {{ days }})</div>
-        <div class="v {% if report.coverage_pct is not none and report.coverage_pct < 100 %}bad{% else %}ok{% endif %}">{% if report.coverage_pct is not none %}{{ report.coverage_pct }}%{% else %}–{% endif %}</div>
-        <div class="s">{{ report.covered_days }} of {{ report.expected_days }} account-days had a successful backup</div>
+        <div class="k">Website files stored</div>
+        <div class="v">{{ report.total_files_bytes | human_bytes }}</div>
+        <div class="s">Across selected accounts</div>
       </div>
       <div class="stat">
-        <div class="k">Failed runs (last {{ days }})</div>
+        <div class="k">Database dumps stored</div>
+        <div class="v">{{ report.total_db_bytes | human_bytes }}</div>
+        <div class="s">Separate from website files</div>
+      </div>
+      <div class="stat">
+        <div class="k">Failed runs ({{ days }}d)</div>
         <div class="v {% if report.failed_runs %}bad{% endif %}">{{ report.failed_runs }}</div>
-        <div class="s">{% if report.failed_runs %}See the days marked ✕ below{% else %}No failures{% endif %}</div>
-      </div>
-      <div class="stat">
-        <div class="k">Stored on this machine</div>
-        <div class="v">{{ report.total_bytes | human_bytes }}</div>
-        <div class="s">Website files + database dumps</div>
+        <div class="s">Coverage {{ report.coverage_pct if report.coverage_pct is not none else '–' }}%</div>
       </div>
     </div>
 
     <div class="card">
-      <strong>Coverage</strong>
-      <div class="matrix" style="margin-top:0.7rem;">
+      <strong>{% if selected %}Coverage · {{ selected.label }}{% else %}Coverage · Files &amp; Databases{% endif %}</strong>
+      <p class="hint" style="margin:0.35rem 0 0.75rem;">
+        Each account has two rows. Blue corner = files updated that day. Click a cell to browse / download / FTP-restore.
+      </p>
+      <div class="matrix">
         {% for acct in report.accounts %}
-          <div class="mrow">
-            <div class="mlabel" title="{{ acct.label }}">{{ acct.label }}</div>
-            <div class="cells">
-              {% for d in report.days %}
-                {% set st = acct.cells[d] %}
-                <span class="cell {{ st }}" title="{{ d.strftime('%a %d %b') }}: {{ word[st] }}" aria-label="{{ acct.label }}, {{ d.strftime('%d %b') }}: {{ word[st] }}">{{ sym[st] }}</span>
-              {% endfor %}
+          <div class="mblock">
+            <div class="mhead">
+              <div class="name"><a href="{{ url_for('backups', account=acct.account_id, days=days) }}">{{ acct.label }}</a></div>
+            </div>
+            <div class="mrow">
+              <div class="mlabel">Files</div>
+              <div class="cells">
+                {% for d in report.days %}
+                  {% set st = acct.files_cells.get(d, 'na') %}
+                  {% set day_s = d.strftime('%Y-%m-%d') %}
+                  {% set upd = acct.files_updated_by_day.get(d, 0) %}
+                  <a class="cell {{ st }}"
+                     href="{{ url_for('restore_day', account_id=acct.account_id, day=day_s, tab='files') }}"
+                     title="{{ d.strftime('%a %d %b') }} · Files {{ word[st] }}{% if upd %} · {{ upd }} updated{% endif %}"
+                     aria-label="{{ acct.label }} files {{ d.strftime('%d %b') }}">{{ sym[st] }}{% if upd %}<span class="upd">{% if upd > 99 %}99+{% else %}{{ upd }}{% endif %}</span>{% endif %}</a>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="mrow">
+              <div class="mlabel">Databases</div>
+              <div class="cells">
+                {% for d in report.days %}
+                  {% set st = acct.db_cells.get(d, 'na') %}
+                  {% set day_s = d.strftime('%Y-%m-%d') %}
+                  <a class="cell {{ st }}"
+                     href="{{ url_for('restore_day', account_id=acct.account_id, day=day_s, tab='db') }}"
+                     title="{{ d.strftime('%a %d %b') }} · DB {{ word[st] }}"
+                     aria-label="{{ acct.label }} databases {{ d.strftime('%d %b') }}">{{ sym[st] }}</a>
+                {% endfor %}
+              </div>
             </div>
           </div>
         {% endfor %}
@@ -117,40 +205,118 @@
         </div>
       </div>
       <div class="legend">
-        <span><span class="cell ok">✓</span>Backed up</span>
-        <span><span class="cell warn">!</span>Failed once, then succeeded</span>
+        <span><span class="cell ok">✓</span>OK</span>
+        <span><span class="cell warn">!</span>Partial</span>
         <span><span class="cell fail">✕</span>Failed</span>
-        <span><span class="cell missed">○</span>No backup ran</span>
-        <span><span class="cell na"></span>Before first backup</span>
+        <span><span class="cell missed">○</span>No backup / no dump</span>
+        <span><span class="cell na"></span>Before first run</span>
+        <span>Blue badge = files updated that day</span>
       </div>
     </div>
 
-    <h2>Day by day</h2>
+    {% if selected %}
+      <div class="section-title">
+        <h2>Restore points</h2>
+        <span class="hint">Download locally or push files back over the same FTP</span>
+      </div>
+      {% if restore_points %}
+        <table class="rp-table">
+          <thead>
+            <tr>
+              <th>Day</th>
+              <th>Files status</th>
+              <th>Updated</th>
+              <th>Databases</th>
+              <th>Size</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for rp in restore_points %}
+              <tr>
+                <td>
+                  <strong>{{ rp.day }}</strong>
+                  {% if rp.day == report.today.strftime('%Y-%m-%d') %}<span class="hint"> · today</span>{% endif %}
+                </td>
+                <td>
+                  <span class="pill {{ rp.files_status|default('na') }}">{{ sym.get(rp.files_status|default('na'), '') }} {{ word.get(rp.files_status|default('na'), '—') }}</span>
+                  <div class="hint">{% if rp.has_files %}{{ rp.files_count }} on disk{% else %}no files folder{% endif %}</div>
+                </td>
+                <td>
+                  {% if rp.files_updated|default(0) %}
+                    <strong>{{ rp.files_updated }}</strong> <span class="hint">new/changed</span>
+                  {% else %}
+                    <span class="muted">0</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="pill {{ rp.db_status|default('na') }}">{{ sym.get(rp.db_status|default('na'), '') }} {{ word.get(rp.db_status|default('na'), '—') }}</span>
+                  <div class="hint">{% if rp.dumps %}{{ rp.dumps|length }} dump{{ '' if rp.dumps|length == 1 else 's' }}{% else %}no dumps{% endif %}</div>
+                </td>
+                <td>{{ rp.files_bytes | human_bytes }}</td>
+                <td>
+                  <div class="rp-actions">
+                    <a class="btn btn-sm btn-primary" href="{{ url_for('restore_day', account_id=selected.id, day=rp.day, tab='files') }}">Browse / download</a>
+                    {% if rp.has_files %}
+                      <a class="btn btn-sm" href="{{ url_for('restore_day', account_id=selected.id, day=rp.day, tab='files') }}#ftp-restore">Restore via FTP</a>
+                    {% endif %}
+                    <a class="btn btn-sm" href="{{ url_for('restore_day', account_id=selected.id, day=rp.day, tab='db') }}">DB dumps</a>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <div class="card">
+          <p>No day folders yet for this account. Run a backup to create <code>YYYY-MM-DD/files</code> and <code>db</code>.</p>
+          <a class="btn btn-primary" href="{{ url_for('account_live', account_id=selected.id) }}">Go to live console</a>
+        </div>
+      {% endif %}
+    {% endif %}
+
+    <div class="section-title">
+      <h2>Day by day</h2>
+      {% if selected %}<span class="hint">Run history for {{ selected.label }}</span>{% endif %}
+    </div>
     {% for row in report.day_rows %}
       {% set has = row.runs or row.dumps %}
       <details class="day {% if not has %}empty{% endif %}" {% if has and loop.index <= 3 %}open{% endif %}>
         <summary {% if not has %}onclick="return false"{% endif %}>
-          <span class="dname">{{ row.day.strftime('%a %d %b %Y') }}{% if row.day == report.today %} · today{% elif (report.today - row.day).days == 1 %} · yesterday{% endif %}</span>
-          {% if row.status != 'na' %}<span class="pill {{ row.status }}">{{ sym[row.status] }} {{ word[row.status] }}{% if report.accounts|length > 1 and row.status != 'ok' %}: {{ row.accounts_with(row.status)|join(', ') }}{% endif %}</span>{% endif %}
+          <span class="dname">
+            {% if selected %}
+              <a href="{{ url_for('restore_day', account_id=selected.id, day=row.day.strftime('%Y-%m-%d')) }}">{{ row.day.strftime('%a %d %b %Y') }}</a>
+            {% else %}
+              {{ row.day.strftime('%a %d %b %Y') }}
+            {% endif %}
+            {% if row.day == report.today %} · today{% elif (report.today - row.day).days == 1 %} · yesterday{% endif %}
+          </span>
           {% if has %}
-            <span class="dsum">{{ row.runs|length }} run{{ '' if row.runs|length == 1 else 's' }}
-              · {{ row.new_files }} new/changed file{{ '' if row.new_files == 1 else 's' }}
-              · {{ row.dumps|length }} database dump{{ '' if row.dumps|length == 1 else 's' }}
-              · {{ row.bytes_total | human_bytes }} transferred</span>
+            <span class="dsum">
+              <strong>{{ row.new_files }}</strong> file{{ '' if row.new_files == 1 else 's' }} updated
+              · {{ row.dumps|length }} DB dump{{ '' if row.dumps|length == 1 else 's' }}
+              · {{ row.bytes_total | human_bytes }}
+            </span>
           {% endif %}
         </summary>
         {% if has %}
         <div class="dbody">
+          {% if selected %}
+            <p class="twin" style="margin:0.4rem 0 0.7rem;">
+              <a class="btn btn-sm btn-primary" href="{{ url_for('restore_day', account_id=selected.id, day=row.day.strftime('%Y-%m-%d'), tab='files') }}">Browse files</a>
+              <a class="btn btn-sm" href="{{ url_for('restore_day', account_id=selected.id, day=row.day.strftime('%Y-%m-%d'), tab='db') }}">Database dumps</a>
+            </p>
+          {% endif %}
           {% if row.runs %}
           <table>
-            <thead><tr><th>Time</th><th>Account</th><th>Result</th><th>Files</th><th>Databases</th><th>Took</th></tr></thead>
+            <thead><tr><th>Time</th><th>Account</th><th>Result</th><th>Files updated</th><th>Databases</th><th>Took</th></tr></thead>
             <tbody>
               {% for r in row.runs %}
               <tr>
                 <td class="mono">{{ r.started.strftime('%H:%M:%S') }}</td>
-                <td>{{ r.label }}</td>
-                <td class="{% if r.status == 'success' %}ok{% elif r.status == 'running' %}muted{% else %}bad{% endif %}">{{ rword.get(r.status, r.status) }}{% if r.error %}<div class="mono">{{ r.error }}</div>{% endif %}</td>
-                <td>{{ r.files_new }} new/changed · {{ r.files_skipped }} unchanged{% if r.files_failed %} · <span class="bad">{{ r.files_failed }} failed</span>{% endif %}<div class="hint">{{ r.files_bytes | human_bytes }}</div></td>
+                <td><a href="{{ url_for('backups', account=r.account_id, days=days) }}">{{ r.label }}</a></td>
+                <td class="{% if r.status == 'success' %}ok{% elif r.status == 'partial' %}warn{% elif r.status == 'running' %}muted{% else %}bad{% endif %}">{{ rword.get(r.status, r.status) }}{% if r.error %}<div class="mono">{{ r.error }}</div>{% endif %}</td>
+                <td><strong>{{ r.files_new }}</strong> new/changed · {{ r.files_skipped }} unchanged{% if r.files_failed %} · <span class="bad">{{ r.files_failed }} failed</span>{% endif %}<div class="hint">{{ r.files_bytes | human_bytes }}</div></td>
                 <td>{{ r.dumps }} dump{{ '' if r.dumps == 1 else 's' }}<div class="hint">{{ r.dump_bytes | human_bytes }}</div></td>
                 <td class="muted">{% if r.duration_s is not none %}{{ r.duration_s }}s{% else %}–{% endif %}</td>
               </tr>
@@ -159,9 +325,9 @@
           </table>
           {% endif %}
           {% if row.dumps %}
-          <h3>Database dumps saved this day</h3>
+          <h3 style="font-size:0.85rem;color:var(--muted);margin:0.8rem 0 0.2rem;">Database dumps saved this day</h3>
           <table>
-            <thead><tr><th>Time</th><th>Account</th><th>File</th><th>Size</th><th>Checksum</th><th>Kept until</th></tr></thead>
+            <thead><tr><th>Time</th><th>Account</th><th>File</th><th>Size</th><th>Checksum</th><th></th></tr></thead>
             <tbody>
               {% for d in row.dumps %}
               <tr>
@@ -170,7 +336,7 @@
                 <td class="mono">{{ d.name }}</td>
                 <td>{{ d.size | human_bytes }}</td>
                 <td class="{{ 'ok' if d.checksum else 'muted' }}">{{ '✓ sha256' if d.checksum else '–' }}</td>
-                <td class="muted">{{ d.kept_until.strftime('%d %b %Y') if d.kept_until else 'forever' }}</td>
+                <td><a class="btn btn-sm" href="{{ url_for('restore_day', account_id=d.account_id, day=row.day.strftime('%Y-%m-%d'), tab='db') }}">Open</a></td>
               </tr>
               {% endfor %}
             </tbody>

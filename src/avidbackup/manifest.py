@@ -69,19 +69,38 @@ class Manifest:
         local_path: Path,
         incremental: bool,
     ) -> bool:
+        """
+        Return True if the remote file must be downloaded.
+
+        Incremental mode compares **size + mtime** against the local copy (and
+        the manifest). A changed local path alone (day-folder / hierarchy remap)
+        does **not** force a re-download when the file already exists at the new
+        location with matching size/mtime — we only refresh the manifest path.
+        """
         if not incremental:
             return True
         if not local_path.is_file():
             return True
+        try:
+            st = local_path.stat()
+        except OSError:
+            return True
+        if st.st_size != size:
+            return True
+
         prev = self.get(remote_path)
         if prev is None:
-            # First run with existing local file: compare size
-            return local_path.stat().st_size != size
+            # Hardlinked / copied into today's folder but not yet in manifest.
+            if mtime is not None and abs(st.st_mtime - float(mtime)) > 2.0:
+                return True
+            return False
+
         if prev.size != size:
             return True
-        if mtime is not None and prev.mtime is not None and abs(mtime - prev.mtime) > 1.0:
+        if mtime is not None and prev.mtime is not None and abs(float(mtime) - float(prev.mtime)) > 1.0:
             return True
-        if local_path.stat().st_size != size:
+        # Remote mtime unknown: size match is enough when local already present.
+        if mtime is not None and prev.mtime is None and abs(st.st_mtime - float(mtime)) > 2.0:
             return True
         return False
 

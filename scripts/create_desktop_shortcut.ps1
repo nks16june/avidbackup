@@ -15,15 +15,15 @@ $Windowed = Join-Path $Root "dist\avidbackup.exe"
 
 if ($Packaged -and (Test-Path $Windowed)) {
     $Target = $Windowed
-    $Args = ""
+    $Args = "agent open"
 } elseif (Test-Path $Cli) {
     $Target = $Cli
-    $Args = "app"
+    $Args = "agent open"
 } else {
     $py = Get-Command python -ErrorAction SilentlyContinue
     if (-not $py) { throw "Local AvidBackup venv not found. Run scripts\install.ps1 first." }
     $Target = $py.Source
-    $Args = "-m avidbackup app"
+    $Args = "-m avidbackup agent open"
 }
 
 $LinkPath = Join-Path $Desktop "AvidBackup - Check backups.lnk"
@@ -33,7 +33,7 @@ $Link.TargetPath = $Target
 $Link.Arguments = $Args
 $Link.WorkingDirectory = $Root
 $Link.WindowStyle = 1
-$Link.Description = "Open the local AvidBackup UI (no installer) to check today's backups"
+$Link.Description = "Open AvidBackup UI (agent keeps running in the background)"
 $Link.Save()
 
 Write-Host "Desktop shortcut: $LinkPath"

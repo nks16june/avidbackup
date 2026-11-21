@@ -6,12 +6,18 @@ See [PREREQUISITES.md](PREREQUISITES.md).
 
 ## Windows installer
 
-1. Download `AvidBackup-Setup-*.exe` from [GitHub Releases](https://github.com/avidwebsolutions/avidbackup/releases/latest).
+1. Download `AvidBackup-Setup-*.exe` from [GitHub Releases](https://github.com/nks16june/avidbackup/releases/latest).
 2. Verify SHA256 against the `.sha256` file on the Release (see [PACKAGING.md](PACKAGING.md)).
 3. Run the installer (per-user by default). SmartScreen may warn on unsigned builds — **More info → Run anyway** until SignPath signing is enabled.
-4. Start **AvidBackup** from the Start Menu — UI opens in your browser (no terminal).
+4. Start **AvidBackup** from the Start Menu — the **system agent** stays running; the browser is only a client (closing a tab does not stop backups).
 
-Optional: desktop icon and daily scheduled task during setup.
+Optional: desktop icon, always-on agent (logon), and daily scheduled task during setup.
+
+```bash
+avidbackup agent install   # keep agent running at Windows logon
+avidbackup agent open      # open UI (starts agent if needed)
+avidbackup agent status
+```
 
 ## pipx / pip (developer path)
 
@@ -37,7 +43,7 @@ Without `AVIDBACKUP_UI_TOKEN` the container **refuses to start**.
 ## From source
 
 ```bash
-git clone https://github.com/avidwebsolutions/avidbackup.git
+git clone https://github.com/nks16june/avidbackup.git
 cd avidbackup
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate

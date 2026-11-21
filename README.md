@@ -3,7 +3,7 @@
 **Free, local-first backup utility for websites and databases.**  
 Pulls files (FTP/FTPS/SFTP) and database dumps to **your own machine**. No cloud, no telemetry.
 
-[![CI](https://github.com/avidwebsolutions/avidbackup/actions/workflows/ci.yml/badge.svg)](https://github.com/avidwebsolutions/avidbackup/actions/workflows/ci.yml)
+[![CI](https://github.com/nks16june/avidbackup/actions/workflows/ci.yml/badge.svg)](https://github.com/nks16june/avidbackup/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/downloads/)
 
@@ -15,7 +15,7 @@ Built by **[Avid Web Solutions](https://avidwebsolutions.in)** · **Nishant Shri
 
 | Path | Command / link |
 |---|---|
-| **Windows installer** | [Latest GitHub Release](https://github.com/avidwebsolutions/avidbackup/releases/latest) → `AvidBackup-Setup-*.exe` (verify `.sha256`) |
+| **Windows installer** | [Latest GitHub Release](https://github.com/nks16june/avidbackup/releases/latest) → `AvidBackup-Setup-*.exe` (verify `.sha256`) |
 | **pipx (any OS)** | `pipx install avidbackup` then `avidbackup app` |
 | **Docker** | `docker compose up -d` (requires `AVIDBACKUP_UI_TOKEN`) — see [docs/INSTALL.md](docs/INSTALL.md) |
 

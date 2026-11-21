@@ -4,101 +4,258 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ brand }}{% endblock %}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
+    /* Fonts are bundled (SIL OFL); nothing is loaded from the internet. */
+    @font-face { font-family: "Source Sans 3"; font-style: normal; font-weight: 400; font-display: swap;
+      src: url("{{ url_for('static', filename='fonts/source-sans-3-latin-400-normal.woff2') }}") format("woff2"); }
+    @font-face { font-family: "Source Sans 3"; font-style: normal; font-weight: 600; font-display: swap;
+      src: url("{{ url_for('static', filename='fonts/source-sans-3-latin-600-normal.woff2') }}") format("woff2"); }
+    @font-face { font-family: "Source Sans 3"; font-style: normal; font-weight: 700; font-display: swap;
+      src: url("{{ url_for('static', filename='fonts/source-sans-3-latin-700-normal.woff2') }}") format("woff2"); }
+    @font-face { font-family: "Source Sans 3"; font-style: italic; font-weight: 400; font-display: swap;
+      src: url("{{ url_for('static', filename='fonts/source-sans-3-latin-400-italic.woff2') }}") format("woff2"); }
+    @font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 400; font-display: swap;
+      src: url("{{ url_for('static', filename='fonts/ibm-plex-mono-latin-400-normal.woff2') }}") format("woff2"); }
+    @font-face { font-family: "IBM Plex Mono"; font-style: normal; font-weight: 500; font-display: swap;
+      src: url("{{ url_for('static', filename='fonts/ibm-plex-mono-latin-500-normal.woff2') }}") format("woff2"); }
     :root {
-      --bg0: #0c1412;
-      --bg1: #13201c;
-      --panel: #1a2b26;
-      --line: #2a4038;
-      --text: #e7f0eb;
-      --muted: #8aa399;
-      --accent: #3dba7a;
-      --accent2: #c4a35a;
-      --bad: #e07070;
-      --ok: #3dba7a;
+      --sidebar: #0f1724;
+      --sidebar-edge: #1c2740;
+      --bg: #e8edf4;
+      --panel: #ffffff;
+      --panel-2: #f4f7fb;
+      --line: #d5deea;
+      --text: #152033;
+      --muted: #5b6b82;
+      --accent: #1f6feb;
+      --accent-deep: #0b4fbf;
+      --ok: #14804a;
+      --ok-bg: #e6f6ec;
+      --warn: #9a6700;
+      --warn-bg: #fff5d6;
+      --bad: #c9372c;
+      --bad-bg: #fdeceb;
+      --run: #0b6bcb;
+      --run-bg: #e6f1fb;
+      --shadow: 0 1px 2px rgba(15, 23, 36, 0.06), 0 8px 24px rgba(15, 23, 36, 0.04);
+      --radius: 10px;
+      --sidebar-w: 232px;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: "DM Sans", system-ui, sans-serif;
+      font-family: "Source Sans 3", "Segoe UI", sans-serif;
       color: var(--text);
-      background:
-        radial-gradient(900px 420px at 100% 0%, #1e3d32 0%, transparent 55%),
-        linear-gradient(165deg, #0a100e, #13201c 50%, #0c1412);
+      background: var(--bg);
+      display: flex;
     }
-    a { color: #7ec8a3; text-decoration: none; }
+    a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
-    header {
-      display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem;
-      padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--line);
+    .shell-nav {
+      width: var(--sidebar-w);
+      flex: none;
+      background: linear-gradient(180deg, #121b2e 0%, var(--sidebar) 100%);
+      color: #d7e0ef;
+      border-right: 1px solid var(--sidebar-edge);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      position: sticky;
+      top: 0;
+      align-self: flex-start;
     }
-    .brand { font-size: 1.45rem; font-weight: 700; letter-spacing: -0.02em; }
-    .sub { color: var(--muted); font-size: 0.9rem; margin-top: 0.2rem; }
-    nav { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .brand-block { padding: 1.25rem 1.1rem 1rem; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .brand-mark {
+      display: flex; align-items: center; gap: 0.65rem;
+    }
+    .brand-mark .logo {
+      width: 34px; height: 34px; border-radius: 8px;
+      background: linear-gradient(145deg, #3d8bfd, #0b4fbf);
+      display: grid; place-items: center;
+      font-weight: 700; color: #fff; font-size: 0.95rem;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
+    }
+    .brand { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.02em; color: #fff; }
+    .brand-sub { color: #8fa0ba; font-size: 0.75rem; margin-top: 0.15rem; }
+    .nav-section { padding: 0.85rem 0.75rem; display: flex; flex-direction: column; gap: 0.2rem; flex: 1; }
+    .nav-label {
+      font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em;
+      color: #7e90ab; padding: 0.35rem 0.55rem 0.45rem; font-weight: 600;
+    }
+    .nav-link {
+      display: flex; align-items: center; gap: 0.55rem;
+      padding: 0.55rem 0.7rem; border-radius: 8px;
+      color: #c5d0e2; text-decoration: none; font-weight: 600; font-size: 0.92rem;
+    }
+    .nav-link:hover { background: rgba(255,255,255,0.06); text-decoration: none; color: #fff; }
+    .nav-link.active { background: rgba(31, 111, 235, 0.28); color: #fff; box-shadow: inset 0 0 0 1px rgba(61,139,253,0.35); }
+    .nav-link .ic { width: 1.1rem; text-align: center; opacity: 0.9; }
+    .nav-cta {
+      margin: 0.5rem 0.75rem 1rem;
+    }
+    .nav-foot {
+      padding: 0.85rem 1rem 1.1rem; border-top: 1px solid rgba(255,255,255,0.08);
+      font-size: 0.72rem; color: #7e90ab; line-height: 1.4;
+    }
+    .shell-main { flex: 1; min-width: 0; width: 100%; display: flex; flex-direction: column; }
+    .topbar {
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      padding: 0.85rem 1.75rem;
+      display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+      position: sticky; top: 0; z-index: 5;
+    }
+    .topbar h1 { margin: 0; font-size: 1.2rem; font-weight: 700; letter-spacing: -0.02em; }
+    .topbar .hint { color: var(--muted); font-size: 0.88rem; margin: 0.15rem 0 0; }
+    .top-actions { display: flex; gap: 0.45rem; flex-wrap: wrap; align-items: center; }
+    .content {
+      padding: 1.25rem 1.75rem 2.5rem;
+      width: 100%;
+      max-width: none;
+      box-sizing: border-box;
+      flex: 1;
+    }
     .btn {
       appearance: none; border: 1px solid var(--line); background: var(--panel);
-      color: var(--text); padding: 0.5rem 0.85rem; border-radius: 8px;
-      font: inherit; cursor: pointer; text-decoration: none; display: inline-block;
+      color: var(--text); padding: 0.5rem 0.9rem; border-radius: 8px;
+      font: inherit; font-weight: 600; cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem;
+      line-height: 1.2; white-space: nowrap; min-height: 36px;
+      flex: 0 0 auto;
     }
-    .btn:hover { border-color: #3d5c4e; text-decoration: none; }
-    .btn-primary { background: #1d4a35; border-color: var(--accent); }
-    .btn-warn { background: #3a3018; border-color: var(--accent2); }
-    .btn-danger { background: #3a1c1c; border-color: var(--bad); }
-    main { padding: 1.25rem 1.5rem 3rem; max-width: 1100px; }
-    .flash { padding: 0.7rem 0.9rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid; }
-    .flash.ok { background: #143226; border-color: #2f6b4d; color: #b7efd0; }
-    .flash.bad { background: #321818; border-color: #7a3030; color: #ffc9c9; }
-    table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-    th, td { text-align: left; padding: 0.7rem 0.85rem; border-bottom: 1px solid var(--line); font-size: 0.92rem; vertical-align: top; }
-    th { color: var(--muted); background: #12201b; font-weight: 600; }
-    tr:last-child td { border-bottom: 0; }
-    .mono { font-family: "IBM Plex Mono", monospace; font-size: 0.82rem; color: var(--muted); word-break: break-all; }
-    .ok { color: var(--ok); } .bad { color: var(--bad); } .muted { color: var(--muted); }
+    .btn:hover { border-color: #b7c5d8; background: var(--panel-2); text-decoration: none; }
+    .btn:focus-visible { outline: 2px solid rgba(31,111,235,0.45); outline-offset: 2px; }
+    .btn-primary { background: var(--accent); border-color: var(--accent-deep); color: #fff; }
+    .btn-primary:hover { background: var(--accent-deep); border-color: var(--accent-deep); color: #fff; }
+    .btn-warn { background: #fff8e8; border-color: #e6c35c; color: #7a5200; }
+    .btn-danger { background: var(--bad-bg); border-color: #f0b6b0; color: var(--bad); }
+    .btn-ghost { background: transparent; }
+    .btn-sm { padding: 0.4rem 0.7rem; font-size: 0.84rem; min-height: 34px; }
+    .btn-block { width: 100%; }
+    .flash { padding: 0.75rem 0.95rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid; font-size: 0.92rem; }
+    .flash.ok { background: var(--ok-bg); border-color: #b7e4c7; color: #0f5132; }
+    .flash.bad { background: var(--bad-bg); border-color: #f0b6b0; color: #842029; }
+    table.panel-table {
+      width: 100%; border-collapse: separate; border-spacing: 0;
+      table-layout: fixed;
+      background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+      overflow: hidden; box-shadow: var(--shadow);
+    }
+    table.panel-table th, table.panel-table td {
+      text-align: left; padding: 0.95rem 1.05rem; border-bottom: 1px solid var(--line);
+      font-size: 0.92rem; vertical-align: middle;
+    }
+    table.panel-table th {
+      color: var(--muted); background: var(--panel-2); font-weight: 700;
+      font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    table.panel-table tr:last-child td { border-bottom: 0; }
+    table.panel-table tbody tr:hover td { background: #f8fafc; }
+    .table-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .mono { font-family: "IBM Plex Mono", monospace; font-size: 0.78rem; color: var(--muted); word-break: break-all; }
+    .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); } .muted { color: var(--muted); }
     .card {
-      background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-      padding: 1.1rem 1.2rem; margin-bottom: 1rem;
+      background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 1.1rem 1.2rem; margin-bottom: 1rem; box-shadow: var(--shadow);
     }
-    label { display: block; font-size: 0.85rem; color: var(--muted); margin: 0.65rem 0 0.25rem; }
+    label { display: block; font-size: 0.85rem; color: var(--muted); margin: 0.65rem 0 0.25rem; font-weight: 600; }
     input, select, textarea {
       width: 100%; padding: 0.55rem 0.7rem; border-radius: 8px;
-      border: 1px solid var(--line); background: #0f1a16; color: var(--text); font: inherit;
+      border: 1px solid var(--line); background: #fff; color: var(--text); font: inherit;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: 2px solid rgba(31,111,235,0.25); border-color: var(--accent);
     }
     .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; }
-    .check { display: flex; align-items: center; gap: 0.45rem; margin-top: 1.2rem; color: var(--text); }
+    .check { display: flex; align-items: center; gap: 0.45rem; margin-top: 1.2rem; color: var(--text); font-weight: 500; }
     .check input { width: auto; }
     h1 { font-size: 1.35rem; margin: 0 0 0.35rem; }
     h2 { font-size: 1.05rem; margin: 1.4rem 0 0.6rem; }
-    .db-block { border: 1px dashed var(--line); border-radius: 10px; padding: 0.85rem; margin-top: 0.75rem; }
-    footer { margin-top: 2rem; color: var(--muted); font-size: 0.82rem; }
+    .db-block { border: 1px dashed var(--line); border-radius: 10px; padding: 0.85rem; margin-top: 0.75rem; background: var(--panel-2); }
+    footer.page-foot { margin-top: 2rem; color: var(--muted); font-size: 0.8rem; }
     .hint { font-size: 0.8rem; color: var(--muted); }
+    .pill {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      font-size: 0.78rem; font-weight: 700; padding: 0.28rem 0.7rem;
+      border-radius: 999px; border: 1px solid; line-height: 1.2; white-space: nowrap;
+    }
+    .pill .sym { font-size: 0.85rem; line-height: 1; }
+    .pill.ok { color: var(--ok); background: var(--ok-bg); border-color: #b7e4c7; }
+    .pill.warn { color: var(--warn); background: var(--warn-bg); border-color: #f0d78c; }
+    .pill.fail, .pill.missed, .pill.needs_full { color: var(--bad); background: var(--bad-bg); border-color: #f0b6b0; }
+    .pill.running { color: var(--run); background: var(--run-bg); border-color: #b5d4f6; }
+    .pill.na { color: var(--muted); background: #eef2f7; border-color: var(--line); }
+    @media (max-width: 860px) {
+      body { flex-direction: column; }
+      .shell-nav { width: 100%; min-height: 0; position: static; }
+      .nav-section { flex-direction: row; flex-wrap: wrap; }
+      .nav-label, .nav-foot { display: none; }
+      .nav-cta { margin: 0 0.75rem 0.75rem auto; }
+    }
   </style>
   {% block head %}{% endblock %}
 </head>
 <body>
-  <header>
-    <div>
-      <div class="brand">{{ brand }}</div>
-      <div class="sub">{{ vendor }} · {{ author }} · home <span class="mono">{{ home }}</span></div>
+  <aside class="shell-nav" aria-label="Primary">
+    <div class="brand-block">
+      <div class="brand-mark">
+        <div class="logo" aria-hidden="true">A</div>
+        <div>
+          <div class="brand">{{ brand }}</div>
+          <div class="brand-sub">Always-on local agent</div>
+        </div>
+      </div>
     </div>
-    <nav>
-      <a class="btn" href="{{ url_for('backups') }}">Backups</a>
-      <a class="btn" href="{{ url_for('index') }}">Accounts</a>
-      <a class="btn" href="{{ url_for('global_settings') }}">Retention & paths</a>
-      <a class="btn btn-primary" href="{{ url_for('new_account') }}">Add website</a>
+    <nav class="nav-section">
+      <div class="nav-label">Workspace</div>
+      <a class="nav-link {% if nav == 'index' %}active{% endif %}" href="{{ url_for('index') }}">
+        <span class="ic" aria-hidden="true">▣</span> Sites
+      </a>
+      <a class="nav-link {% if nav == 'backups' %}active{% endif %}" href="{{ url_for('backups') }}">
+        <span class="ic" aria-hidden="true">▦</span> Backup calendar
+      </a>
+      <a class="nav-link {% if nav == 'global_settings' %}active{% endif %}" href="{{ url_for('global_settings') }}">
+        <span class="ic" aria-hidden="true">⚙</span> Settings
+      </a>
+      <div class="nav-label" style="margin-top:0.75rem;">Actions</div>
+      <a class="nav-link {% if nav == 'new_account' %}active{% endif %}" href="{{ url_for('new_account') }}">
+        <span class="ic" aria-hidden="true">＋</span> Add website
+      </a>
     </nav>
-  </header>
-  <main>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% for cat, msg in messages %}
-        <div class="flash {{ cat }}">{{ msg }}</div>
-      {% endfor %}
-    {% endwith %}
-    {% block body %}{% endblock %}
-    <footer>Free MIT utility · runs on Windows, macOS, and Linux · backups stay on your machine</footer>
-  </main>
+    <div class="nav-cta">
+      <form method="post" action="{{ url_for('run_all') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn btn-primary" type="submit" style="width:100%; justify-content:center;">Backup all</button>
+      </form>
+    </div>
+    <div class="nav-foot">
+      {{ vendor }} · v{{ app_version }}<br>
+      <span class="mono" style="color:#7e90ab;">{{ home }}</span>
+    </div>
+  </aside>
+
+  <div class="shell-main">
+    <header class="topbar">
+      <div>
+        {% block topbar %}
+          <h1>{% block page_title %}{{ brand }}{% endblock %}</h1>
+          {% block page_subtitle %}<p class="hint">Website files and databases, kept on this machine.</p>{% endblock %}
+        {% endblock %}
+      </div>
+      <div class="top-actions">
+        {% block top_actions %}{% endblock %}
+      </div>
+    </header>
+    <main class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for cat, msg in messages %}
+          <div class="flash {{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% block body %}{% endblock %}
+      <footer class="page-foot">AvidBackup · Free MIT · Local-first multi-site backup by Avid Web Solutions</footer>
+    </main>
+  </div>
 </body>
 </html>

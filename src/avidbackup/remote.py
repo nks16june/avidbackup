@@ -20,6 +20,86 @@ ProgressCb = Callable[[int], None]
 log = logging.getLogger(__name__)
 
 
+def acceptable_tls_name(connect_host: str, cert_names: list[str]) -> str | None:
+    """A certificate name is acceptable when it is the host or the same site domain."""
+    host = connect_host.lower().strip(".")
+    parts = host.split(".")
+    parent = ".".join(parts[-2:]) if len(parts) >= 2 else host
+    for name in cert_names:
+        candidate = name.lower().strip(".")
+        if candidate == host or candidate == parent or candidate.endswith("." + parent):
+            return name
+    return None
+
+
+def _certificate_dns_names(host: str, port: int) -> list[str]:
+    """Names on the server certificate. The chain is still checked; the hostname is not."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ftp = FTP_TLS(context=ctx)
+    try:
+        ftp.connect(host, port, timeout=30)
+        ftp.auth()
+        cert = ftp.sock.getpeercert() if ftp.sock is not None else {}
+    finally:
+        try:
+            ftp.close()
+        except OSError:
+            pass
+    names = [value for kind, value in cert.get("subjectAltName", ()) if kind == "DNS"]
+    if not names:
+        for item in cert.get("subject", ()):
+            for key, value in item:
+                if key == "commonName":
+                    names.append(value)
+    return names
+
+
+class _NamedFTP_TLS(FTP_TLS):
+    """FTPS client that checks the certificate against a name other than the connect host."""
+
+    def __init__(self, *args, tls_hostname: str, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._tls_hostname = tls_hostname
+
+    def auth(self):
+        if isinstance(self.sock, ssl.SSLSocket):
+            raise ValueError("Already using TLS")
+        resp = self.voidcmd("AUTH TLS")
+        self.sock = self.context.wrap_socket(self.sock, server_hostname=self._tls_hostname)
+        self.file = self.sock.makefile(mode="r", encoding=self.encoding)
+        return resp
+
+    def ntransfercmd(self, cmd, rest=None):
+        conn, size = super(FTP_TLS, self).ntransfercmd(cmd, rest)
+        if self._prot_p:
+            conn = self.context.wrap_socket(conn, server_hostname=self._tls_hostname)
+        return conn, size
+
+
+def _tls_hostname(settings: Settings) -> str:
+    pinned = str(getattr(settings, "tls_server_hostname", "") or "").strip()
+    if pinned:
+        return pinned
+    cached = getattr(settings, "_tls_server_name", "")
+    if cached:
+        return str(cached)
+    try:
+        names = _certificate_dns_names(settings.host, int(settings.port or 21))
+    except (OSError, ssl.SSLError, error_perm) as exc:
+        log.warning("Could not read the FTPS certificate for %s: %s", settings.host, exc)
+        return settings.host
+    chosen = acceptable_tls_name(settings.host, names) or (names[0] if names else settings.host)
+    settings._tls_server_name = chosen  # type: ignore[attr-defined]
+    if chosen.lower().strip(".") != settings.host.lower().strip("."):
+        log.info(
+            "FTPS certificate for %s is issued to %s. Verifying against that name.",
+            settings.host,
+            chosen,
+        )
+    return chosen
+
+
 @dataclass(frozen=True)
 class RemoteEntry:
     path: str  # absolute posix-style remote path
@@ -47,6 +127,19 @@ class RemoteClient(AbstractContextManager):
     def upload_bytes(self, remote_path: str, data: bytes) -> None:
         ...
 
+    def ensure_dir(self, remote_dir: str) -> None:
+        """Create remote directory (and parents) if missing."""
+        raise NotImplementedError
+
+    def upload_file(
+        self,
+        local_path: Path,
+        remote_path: str,
+        progress: ProgressCb | None = None,
+    ) -> None:
+        """Upload a local file to remote_path (STOR/SFTP put)."""
+        raise NotImplementedError
+
     @abstractmethod
     def read_bytes(self, remote_path: str, max_bytes: int = 2_000_000) -> bytes:
         ...
@@ -59,11 +152,19 @@ class RemoteClient(AbstractContextManager):
     def exists(self, remote_path: str) -> bool:
         ...
 
-    def walk_files(self, remote_root: str) -> Iterator[RemoteEntry]:
-        stack = [remote_root.rstrip("/") or "/"]
+    def walk_files(
+        self,
+        remote_root: str,
+        *,
+        skip_dir: Callable[[str], bool] | None = None,
+    ) -> Iterator[RemoteEntry]:
+        """Breadth-first: each folder fully listed before going deeper (organised scan)."""
+        from collections import deque
+
+        queue: deque[str] = deque([remote_root.rstrip("/") or "/"])
         seen: set[str] = set()
-        while stack:
-            current = stack.pop()
+        while queue:
+            current = queue.popleft()
             if current in seen:
                 continue
             seen.add(current)
@@ -72,20 +173,65 @@ class RemoteClient(AbstractContextManager):
             except Exception as exc:  # noqa: BLE001
                 log.warning("Cannot list %s: %s", current, exc)
                 continue
+            # Stable order: directories then files, by name
+            entries = sorted(entries, key=lambda e: (not e.is_dir, e.path.lower()))
             for entry in entries:
                 if entry.is_dir:
-                    stack.append(entry.path)
+                    if skip_dir is not None and skip_dir(entry.path):
+                        continue
+                    queue.append(entry.path)
                 else:
                     yield entry
 
+    def walk_folders(
+        self,
+        remote_root: str,
+        *,
+        skip_dir: Callable[[str], bool] | None = None,
+    ) -> Iterator[tuple[str, list[RemoteEntry]]]:
+        """Yield (folder_path, file_entries_in_folder) breadth-first, one folder at a time."""
+        from collections import deque
+
+        queue: deque[str] = deque([remote_root.rstrip("/") or "/"])
+        seen: set[str] = set()
+        while queue:
+            current = queue.popleft()
+            if current in seen:
+                continue
+            seen.add(current)
+            try:
+                entries = self.list_dir(current)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("Cannot list %s: %s", current, exc)
+                continue
+            entries = sorted(entries, key=lambda e: (not e.is_dir, e.path.lower()))
+            files: list[RemoteEntry] = []
+            for entry in entries:
+                if entry.is_dir:
+                    if skip_dir is not None and skip_dir(entry.path):
+                        continue
+                    queue.append(entry.path)
+                else:
+                    files.append(entry)
+            yield current, files
+
+
+def normalize_access_protocol(protocol: str) -> str:
+    """Map UI access modes to transport. ``ssh`` = SFTP over the SSH login."""
+    p = (protocol or "ftps").strip().lower()
+    if p == "ssh":
+        return "sftp"
+    return p
+
 
 def connect(settings: Settings) -> RemoteClient:
-    protocol = settings.protocol
+    protocol = normalize_access_protocol(settings.protocol)
+    settings.protocol = protocol
     if protocol == "sftp":
         return SftpClient(settings)
     if protocol in {"ftp", "ftps"}:
         return FtpClient(settings)
-    raise ValueError(f"Unsupported FTP_PROTOCOL={protocol!r} (use ftp, ftps, or sftp)")
+    raise ValueError(f"Unsupported FTP_PROTOCOL={protocol!r} (use ftp, ftps, sftp, or ssh)")
 
 
 class FtpClient(RemoteClient):
@@ -99,7 +245,7 @@ class FtpClient(RemoteClient):
         if s.protocol == "ftps":
             if verify_tls:
                 ctx = ssl.create_default_context()
-                ftp: FTP = FTP_TLS(context=ctx)
+                ftp: FTP = _NamedFTP_TLS(context=ctx, tls_hostname=_tls_hostname(s))
             else:
                 log.warning(
                     "FTPS certificate verification DISABLED for %s (verify_tls=false). "
@@ -235,6 +381,59 @@ class FtpClient(RemoteClient):
         ftp = self._ftp()
         ftp.storbinary(f"STOR {remote_path}", BytesIO(data))
 
+    def ensure_dir(self, remote_dir: str) -> None:
+        ftp = self._ftp()
+        path = remote_dir.replace("\\", "/").rstrip("/") or "/"
+        if path == "/":
+            return
+        parts = [p for p in path.split("/") if p]
+        cur = ""
+        for part in parts:
+            cur = f"{cur}/{part}"
+            try:
+                ftp.mkd(cur)
+            except error_perm as exc:
+                # 550 usually means already exists
+                if not str(exc).startswith("550"):
+                    # Some servers return 521/550 for exists — ignore exists-like codes.
+                    msg = str(exc).lower()
+                    if "exists" not in msg and "file exists" not in msg:
+                        # Probe with cwd
+                        try:
+                            cwd = ftp.pwd()
+                            ftp.cwd(cur)
+                            ftp.cwd(cwd)
+                        except Exception:  # noqa: BLE001
+                            raise exc from None
+
+    def upload_file(
+        self,
+        local_path: Path,
+        remote_path: str,
+        progress: ProgressCb | None = None,
+    ) -> None:
+        from pathlib import PurePosixPath
+
+        ftp = self._ftp()
+        parent = str(PurePosixPath(remote_path).parent)
+        if parent and parent not in {".", "/"}:
+            self.ensure_dir(parent)
+        transferred = 0
+
+        def _cb(chunk: bytes) -> None:
+            nonlocal transferred
+            transferred += len(chunk)
+            if progress is not None:
+                progress(transferred)
+
+        with local_path.open("rb") as fh:
+            ftp.storbinary(
+                f"STOR {remote_path}",
+                fh,
+                blocksize=65536,
+                callback=_cb if progress is not None else None,
+            )
+
     def read_bytes(self, remote_path: str, max_bytes: int = 2_000_000) -> bytes:
         from io import BytesIO
 
@@ -344,6 +543,43 @@ class SftpClient(RemoteClient):
         from io import BytesIO
 
         self._sftp().putfo(BytesIO(data), remote_path)
+
+    def ensure_dir(self, remote_dir: str) -> None:
+
+        sftp = self._sftp()
+        path = remote_dir.replace("\\", "/").rstrip("/") or "/"
+        if path == "/":
+            return
+        parts = [p for p in path.split("/") if p]
+        cur = ""
+        for part in parts:
+            cur = f"{cur}/{part}"
+            try:
+                sftp.stat(cur)
+            except OSError:
+                sftp.mkdir(cur)
+
+    def upload_file(
+        self,
+        local_path: Path,
+        remote_path: str,
+        progress: ProgressCb | None = None,
+    ) -> None:
+        from pathlib import PurePosixPath
+
+        parent = str(PurePosixPath(remote_path).parent)
+        if parent and parent not in {".", "/"}:
+            self.ensure_dir(parent)
+
+        def cb(transferred: int, _total: int) -> None:
+            if progress is not None:
+                progress(transferred)
+
+        self._sftp().put(
+            str(local_path),
+            remote_path,
+            callback=cb if progress is not None else None,
+        )
 
     def read_bytes(self, remote_path: str, max_bytes: int = 2_000_000) -> bytes:
         from io import BytesIO
