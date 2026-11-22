@@ -38,7 +38,7 @@ classifiers = [
 dependencies = [
   "python-dotenv>=1.0.0,<2",
   "PyMySQL>=1.1.0,<2",
-  "paramiko>=3.4.0,<4",
+  "paramiko>=3.4.0,<6",
   "flask>=3.0.0,<4",
 ]
 
