@@ -4,6 +4,7 @@ from typing import Any
 
 from avidbackup.databases.base import DbDumper
 from avidbackup.databases.mysql import MysqlDumper
+from avidbackup.databases.php_helper import PhpHelperDumper
 from avidbackup.databases.postgres import PostgresDumper
 from avidbackup.databases.sqlite import SqliteDumper
 
@@ -19,6 +20,10 @@ _REGISTRY: dict[str, type[DbDumper]] = {
 
 def get_dumper(db_config: Any, settings: Any, *, remote_client: Any | None = None) -> DbDumper:
     db_type = (getattr(db_config, "type", None) or "mysql").lower()
+    if getattr(db_config, "via", "direct") == "php":
+        if db_type not in {"mysql", "mariadb"}:
+            raise ValueError("The PHP helper only supports MySQL / MariaDB databases.")
+        return PhpHelperDumper(db_config, settings, remote_client=remote_client)
     cls = _REGISTRY.get(db_type)
     if cls is None:
         raise ValueError(

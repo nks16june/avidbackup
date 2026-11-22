@@ -220,7 +220,9 @@
             <input type="hidden" name="db_id_{{ loop.index0 }}" value="{{ d.id }}">
             <input type="hidden" name="db_discover_{{ loop.index0 }}" class="db-discover-flag" value="{{ 'on' if mode=='auto' else '' }}">
             <div class="db-head">
-              <div class="db-title">Database {{ loop.index }}</div>
+              <div class="db-title">Database {{ loop.index }}
+                {% if account and d.id %}<a class="hint" style="font-weight:400;margin-left:0.6rem;" href="{{ url_for('db_connection_page', account_id=account.id, db_id=d.id) }}">Connection: {{ {'direct': 'direct', 'ssh': 'SSH tunnel', 'php': 'PHP helper'}.get(d.via, 'direct') }} · change</a>{% endif %}
+              </div>
               <div class="mode-seg" role="group" aria-label="Entry mode">
                 <button type="button" class="db-mode-btn {% if mode=='auto' %}active{% endif %}" data-mode="auto">Auto-fetch</button>
                 <button type="button" class="db-mode-btn {% if mode=='manual' %}active{% endif %}" data-mode="manual">Manual entry</button>

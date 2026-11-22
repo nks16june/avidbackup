@@ -44,6 +44,7 @@ from avidbackup.store import (
     DatabaseConfig,
     FtpConfig,
     RetentionConfig,
+    carry_connection_settings,
     delete_account,
     load_config,
     new_account_id,
@@ -1166,8 +1167,11 @@ def create_app(*, bind_host: str | None = None) -> Flask:
                         password_env = old.password_env
                         break
             default_port = 5432 if db_type == "postgres" else (0 if db_type == "sqlite" else 3306)
+            old_db = next((o for o in (existing.databases if existing else []) if o.id == db_id), None)
             databases.append(
-                DatabaseConfig(
+                carry_connection_settings(
+                    old_db,
+                    DatabaseConfig(
                     id=db_id,
                     label=(request.form.get(f"db_label_{i}") or db_name or db_id).strip(),
                     type=db_type,
@@ -1183,6 +1187,7 @@ def create_app(*, bind_host: str | None = None) -> Flask:
                     enabled=request.form.get(f"db_enabled_{i}") == "on",
                     discover_from_site=request.form.get(f"db_discover_{i}") == "on",
                     ssl=request.form.get(f"db_ssl_{i}") == "on",
+                    ),
                 )
             )
 
@@ -1338,6 +1343,9 @@ def create_app(*, bind_host: str | None = None) -> Flask:
         )
         return redirect(url_for("index"))
 
+    from avidbackup.webui.db_connection import register_db_connection_routes
+
+    register_db_connection_routes(app)
     return app
 
 

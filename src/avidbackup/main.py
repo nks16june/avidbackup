@@ -124,6 +124,37 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     sub.add_parser("doctor", help="Check Python, tools, and write permissions")
 
+    p_helper = sub.add_parser(
+        "helper",
+        help="PHP helper for MySQL on hosts that block remote MySQL and have no SSH",
+    )
+    helper_sub = p_helper.add_subparsers(dest="helper_command", required=True)
+    for name, text in (
+        ("install", "Upload the helper to the site and switch the database to it"),
+        ("test", "Check that the helper answers and can reach the database"),
+        ("remove", "Delete the helper from the site"),
+    ):
+        hp = helper_sub.add_parser(name, help=text)
+        hp.add_argument("--account", required=True)
+        hp.add_argument("--db", required=True, help="Database entry id")
+        if name == "install":
+            hp.add_argument(
+                "--url",
+                default="",
+                help="Folder URL the upload directory is served at (default: the site URL)",
+            )
+            hp.add_argument(
+                "--allowed-ip",
+                default="",
+                help="Only accept requests from these addresses (comma separated)",
+            )
+
+    p_dbtest = sub.add_parser(
+        "db-test", help="Test how AvidBackup reaches a database (direct, SSH tunnel or PHP helper)"
+    )
+    p_dbtest.add_argument("--account", required=True)
+    p_dbtest.add_argument("--db", default="", help="Database entry id (default: every database)")
+
     p_token = sub.add_parser("token", help="Print the UI sign-in token and sign-in link")
     p_token.add_argument("--rotate", action="store_true", help="Generate a new token (signs everyone out)")
 
@@ -666,6 +697,75 @@ def cmd_agent(args: argparse.Namespace) -> int:
     return 0 if (action in {"uninstall", "status"} or st.running or st.pid) else 1
 
 
+def _find_database(cfg, account_id: str, db_id: str):  # noqa: ANN001, ANN202
+    account = cfg.account(account_id)  # KeyError when unknown
+    for db in account.databases:
+        if db.id == db_id:
+            return account, db
+    known = ", ".join(d.id for d in account.databases) or "none"
+    raise KeyError(f"No database {db_id!r} on {account_id} (databases: {known})")
+
+
+def cmd_helper(args: argparse.Namespace) -> int:
+    from avidbackup import db_connection
+    from avidbackup.php_helper import HelperError
+
+    ensure_layout()
+    try:
+        cfg = load_config()
+        account, db = _find_database(cfg, args.account, args.db)
+    except (KeyError, FileNotFoundError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    try:
+        if args.helper_command == "install":
+            info = db_connection.install_helper_for(
+                cfg, account, db, base_url=args.url, allowed_ips=args.allowed_ip
+            )
+            save_config(cfg)
+            print(f"Helper installed and answering at {info.url}")
+            print(f"Uploaded to {info.path}. The secret token is saved in accounts.json (not printed).")
+            print("Back up this database with: avidbackup run --account " + args.account + " --db-only")
+            return 0
+        if args.helper_command == "test":
+            if db.via != "php":
+                print("This database does not use the PHP helper (set up with: avidbackup helper install).")
+                return 1
+            print(db_connection.test_database_connection(cfg, account, db))
+            return 0
+        db_connection.remove_helper_for(cfg, account, db)
+        save_config(cfg)
+        print("Helper removed from the server. This database now connects directly again.")
+        return 0
+    except (HelperError, OSError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
+def cmd_db_test(args: argparse.Namespace) -> int:
+    from avidbackup import db_connection
+
+    ensure_layout()
+    try:
+        cfg = load_config()
+        account = cfg.account(args.account)
+    except (KeyError, FileNotFoundError, ValueError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    databases = [d for d in account.databases if not args.db or d.id == args.db]
+    if not databases:
+        print("No matching database.", file=sys.stderr)
+        return 2
+    worst = 0
+    for db in databases:
+        try:
+            print(f"[{db.id}] {db_connection.test_database_connection(cfg, account, db)}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"[{db.id}] FAILED: {exc}", file=sys.stderr)
+            worst = 1
+    return worst
+
+
 def cmd_token(args: argparse.Namespace) -> int:
     from avidbackup.webui.security import (
         auth_disabled_by_env,
@@ -732,7 +832,7 @@ def run(argv: list[str] | None = None) -> int:
     if cmd is None:
         # Avoid SystemExit from argparse --help so callers/tests can handle the return code
         print(
-            "Use: avidbackup {app,agent,ui,run,digest,snapshot,list,init,verify,restore-db,doctor,tools,token} — "
+            "Use: avidbackup {app,agent,ui,run,digest,snapshot,list,init,verify,restore-db,doctor,tools,token,helper,db-test} — "
             "try avidbackup --help"
         )
         return 0
@@ -766,6 +866,10 @@ def run(argv: list[str] | None = None) -> int:
         return cmd_tools(args)
     if cmd == "token":
         return cmd_token(args)
+    if cmd == "helper":
+        return cmd_helper(args)
+    if cmd == "db-test":
+        return cmd_db_test(args)
     if cmd == "run":
         return cmd_run(args)
     if cmd == "digest":

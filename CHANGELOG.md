@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **SSH tunnel** for MySQL / MariaDB / PostgreSQL on hosts that block remote database access (`via: ssh`), with SFTP-style host-key checking and an option to reuse the site's SFTP login
+- **PHP helper** for MySQL / MariaDB on hosts with neither remote MySQL nor SSH (`via: php`): generated per database, token-protected, read-only, HTTPS-only; `avidbackup helper install|test|remove`
+- `avidbackup db-test` and a per-database **Connection method** page in the UI
+- Fix: saving the account form no longer wipes a database's connection settings
+- See [docs/HOSTS-WITHOUT-REMOTE-MYSQL.md](docs/HOSTS-WITHOUT-REMOTE-MYSQL.md)
+
 ### Security
 
 - UI sign-in on by default: a random token is generated on first run (`avidbackup token`); the launcher opens a fragment sign-in link

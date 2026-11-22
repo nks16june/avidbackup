@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Database connection · {{ brand }}{% endblock %}
+{% block body %}
+  <h1>How AvidBackup reaches this database</h1>
+  <p class="muted">{{ account.label }} · <strong>{{ db.label or db.database or db.id }}</strong>
+    · <a href="{{ url_for('edit_account', account_id=account.id) }}">Back to the site</a></p>
+
+  <form method="post" class="card" style="max-width:760px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="via">Connection method</label>
+    <select id="via" name="via">
+      <option value="direct" {% if db.via == 'direct' %}selected{% endif %}>Direct: connect to the database host from this computer (default)</option>
+      <option value="ssh" {% if db.via == 'ssh' %}selected{% endif %}>SSH tunnel: for hosts that block remote MySQL but allow SSH</option>
+      {% if db.type in ('mysql', 'mariadb') %}<option value="php" {% if db.via == 'php' %}selected{% endif %}>PHP helper: for hosts with neither remote MySQL nor SSH (MySQL only)</option>{% endif %}
+    </select>
+
+    <div data-via="direct" class="hint" style="margin-top:0.8rem;">
+      The database host must accept connections from this computer. Many shared hosts block that:
+      allow your IP in the hosting panel, or use one of the other two methods.
+    </div>
+
+    <div data-via="ssh" style="margin-top:0.8rem;">
+      <p class="hint">AvidBackup opens an SSH connection and reaches the database through it, so the database
+        does not need to be reachable from the internet. Host keys are checked like SFTP (trust on first use).</p>
+      <label class="check"><input type="checkbox" name="ssh_same_as_ftp" {% if db.ssh_same_as_ftp %}checked{% endif %} {% if not sftp_site %}disabled data-keep-disabled{% endif %}>
+        Use the site's SFTP login {% if not sftp_site %}<span class="muted">(available when the site's file access is SFTP)</span>{% endif %}</label>
+      <div class="row">
+        <div><label>SSH host</label><input name="ssh_host" value="{{ db.ssh_host }}" placeholder="ssh.example.com"></div>
+        <div><label>SSH port</label><input type="number" name="ssh_port" value="{{ db.ssh_port }}" min="1" max="65535"></div>
+        <div><label>SSH user</label><input name="ssh_user" value="{{ db.ssh_user }}"></div>
+      </div>
+      <div class="row">
+        <div><label>SSH password <span class="muted">(blank = keep{% if has_ssh_password %}; one is saved{% endif %})</span></label>
+          <input type="password" name="ssh_password" value="" autocomplete="new-password" placeholder="••••"></div>
+        <div><label>or password from environment variable</label><input name="ssh_password_env" value="{{ db.ssh_password_env }}" placeholder="MY_SSH_PASSWORD"></div>
+      </div>
+      <div class="row">
+        <div><label>Private key file <span class="muted">(instead of a password)</span></label><input name="ssh_key_file" value="{{ db.ssh_key_file }}" placeholder="C:\Users\you\.ssh\id_ed25519"></div>
+        <div><label>Host key check</label>
+          <select name="ssh_host_key_policy">
+            <option value="tofu" {% if db.ssh_host_key_policy == 'tofu' %}selected{% endif %}>Trust on first use (default)</option>
+            <option value="strict" {% if db.ssh_host_key_policy == 'strict' %}selected{% endif %}>Strict (key must already be known)</option>
+            <option value="insecure" {% if db.ssh_host_key_policy == 'insecure' %}selected{% endif %}>Off (not recommended)</option>
+          </select></div>
+      </div>
+      <div class="row">
+        <div><label>Database host, as seen from the SSH server</label><input name="db_host" value="{{ db.host or '127.0.0.1' }}"></div>
+        <div><label>Database port</label><input type="number" name="db_port" value="{{ db.port }}"></div>
+      </div>
+    </div>
+
+    {% if db.type in ('mysql', 'mariadb') %}
+    <div data-via="php" style="margin-top:0.8rem;">
+      {% if db.helper_url %}
+        <p>A helper is installed at <code>{{ db.helper_url }}</code>{% if has_token %} (secret token saved){% endif %}.</p>
+        <div class="row"><div><label>Database host, as seen by the web server</label><input name="db_host" value="{{ db.host or 'localhost' }}"></div></div>
+      {% else %}
+        <p class="muted">No helper is installed yet. Use <strong>Install the helper</strong> below.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <p style="margin-top:1.1rem;"><button class="btn btn-primary" type="submit">Save connection method</button></p>
+  </form>
+
+  <div class="card" style="max-width:760px;">
+    <strong>Test it</strong>
+    <p class="hint" style="margin:0.3rem 0 0.7rem;">Tries the saved method and reports what happened.</p>
+    <form method="post" action="{{ url_for('db_connection_test', account_id=account.id, db_id=db.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn" type="submit">Test the connection</button>
+    </form>
+  </div>
+
+  {% if db.type in ('mysql', 'mariadb') %}
+  <div class="card" style="max-width:760px;">
+    <strong>PHP helper</strong>
+    <p class="hint" style="margin:0.3rem 0 0.7rem;">
+      AvidBackup uploads one small PHP file to the site over the site's FTP/SFTP login, with a random file name
+      and a secret token (only its hash is kept on the server). It sends a read-only dump of this one database
+      over HTTPS. It runs no shell commands. The file contains the database login, like <code>wp-config.php</code>
+      does, so remove it when you no longer need it. Details: <a href="https://github.com/nks16june/avidbackup/blob/main/docs/HOSTS-WITHOUT-REMOTE-MYSQL.md">docs</a>.
+    </p>
+    <form method="post" action="{{ url_for('db_helper_install', account_id=account.id, db_id=db.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="row">
+        <div><label>Folder URL <span class="muted">(optional; default is the site URL {{ account.site_url }})</span></label>
+          <input name="helper_base_url" placeholder="https://example.com/"></div>
+        <div><label>Only allow these IP addresses <span class="muted">(optional)</span></label>
+          <input name="allowed_ips" placeholder="203.0.113.7"></div>
+      </div>
+      <p style="margin-top:0.9rem;">
+        <button class="btn btn-primary" type="submit">{% if db.helper_url %}Reinstall the helper (new token){% else %}Install the helper{% endif %}</button>
+      </p>
+    </form>
+    {% if db.helper_url %}
+    <form method="post" action="{{ url_for('db_helper_remove', account_id=account.id, db_id=db.id) }}"
+          onsubmit="return confirm('Delete the helper from the server? This database will connect directly again.');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-danger" type="submit">Remove the helper from the server</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <script>
+    (function () {
+      var select = document.getElementById('via');
+      function show() {
+        document.querySelectorAll('[data-via]').forEach(function (el) {
+          var on = el.getAttribute('data-via') === select.value;
+          el.style.display = on ? '' : 'none';
+          el.querySelectorAll('input, select').forEach(function (f) { f.disabled = !on || f.hasAttribute('data-keep-disabled'); });
+        });
+      }
+      select.addEventListener('change', show);
+      show();
+    })();
+  </script>
+{% endblock %}

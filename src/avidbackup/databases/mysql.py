@@ -5,7 +5,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from avidbackup.databases.base import DbDumper, DumpResult
+from avidbackup.databases.base import DbDumper, DumpResult, with_tunnel
 from avidbackup.databases.compress import maybe_gzip
 from avidbackup.mysql_config import (
     MysqlCredentials,
@@ -70,6 +70,7 @@ class MysqlDumper(DbDumper):
             profile="explicit",
         )
 
+    @with_tunnel
     def test_connection(self) -> None:
         try:
             import pymysql
@@ -125,6 +126,7 @@ class MysqlDumper(DbDumper):
             )
         return [self._creds()]
 
+    @with_tunnel
     def dump(self, dest_dir: Path) -> DumpResult:
         dest_dir.mkdir(parents=True, exist_ok=True)
         try:
@@ -173,6 +175,7 @@ class MysqlDumper(DbDumper):
             table_report=report,
         )
 
+    @with_tunnel
     def table_sizes(self):
         return collect_table_sizes(self._creds(), self.settings)
 

@@ -55,6 +55,26 @@ class DatabaseConfig:
     enabled: bool = True
     discover_from_site: bool = False
     ssl: bool = False
+    # How AvidBackup reaches the database:
+    #   direct - connect to host:port from this machine (default)
+    #   ssh    - through an SSH tunnel (hosts that block remote MySQL but allow SSH)
+    #   php    - through a small PHP helper uploaded to the site (no SSH, no remote MySQL)
+    via: str = "direct"
+    # --- via: ssh ---
+    ssh_same_as_ftp: bool = False  # reuse the site's SFTP login (host, port, user, password)
+    ssh_host: str = ""
+    ssh_port: int = 22
+    ssh_user: str = ""
+    ssh_password: str = ""
+    ssh_password_env: str = ""
+    ssh_key_file: str = ""
+    ssh_key_passphrase_env: str = ""
+    ssh_host_key_policy: str = "tofu"  # tofu | strict | insecure
+    # --- via: php ---
+    helper_url: str = ""
+    helper_token: str = ""
+    helper_token_env: str = ""
+    helper_path: str = ""  # where the helper was uploaded on the server (for removal)
 
 
 @dataclass
@@ -166,7 +186,54 @@ def _db_from(raw: dict[str, Any]) -> DatabaseConfig:
         enabled=bool(raw.get("enabled", True)),
         discover_from_site=bool(raw.get("discover_from_site", False)),
         ssl=bool(raw.get("ssl", False)),
+        via=_via(raw.get("via")),
+        ssh_same_as_ftp=bool(raw.get("ssh_same_as_ftp", False)),
+        ssh_host=str(raw.get("ssh_host") or ""),
+        ssh_port=int(raw.get("ssh_port") or 22),
+        ssh_user=str(raw.get("ssh_user") or ""),
+        ssh_password=str(raw.get("ssh_password") or ""),
+        ssh_password_env=str(raw.get("ssh_password_env") or ""),
+        ssh_key_file=str(raw.get("ssh_key_file") or ""),
+        ssh_key_passphrase_env=str(raw.get("ssh_key_passphrase_env") or ""),
+        ssh_host_key_policy=str(raw.get("ssh_host_key_policy") or "tofu").lower(),
+        helper_url=str(raw.get("helper_url") or ""),
+        helper_token=str(raw.get("helper_token") or ""),
+        helper_token_env=str(raw.get("helper_token_env") or ""),
+        helper_path=str(raw.get("helper_path") or ""),
     )
+
+
+def _via(value: Any) -> str:
+    via = str(value or "direct").strip().lower()
+    return via if via in {"direct", "ssh", "php"} else "direct"
+
+
+# Settings the account form does not edit (they have their own page), so saving the form
+# must carry them over from the existing entry with the same database id.
+CONNECTION_FIELDS = (
+    "via",
+    "ssh_same_as_ftp",
+    "ssh_host",
+    "ssh_port",
+    "ssh_user",
+    "ssh_password",
+    "ssh_password_env",
+    "ssh_key_file",
+    "ssh_key_passphrase_env",
+    "ssh_host_key_policy",
+    "helper_url",
+    "helper_token",
+    "helper_token_env",
+    "helper_path",
+)
+
+
+def carry_connection_settings(old: DatabaseConfig | None, new: DatabaseConfig) -> DatabaseConfig:
+    """Copy the connection method (direct / SSH tunnel / PHP helper) from `old` onto `new`."""
+    if old is not None:
+        for name in CONNECTION_FIELDS:
+            setattr(new, name, getattr(old, name))
+    return new
 
 
 def _retention_from(raw: dict[str, Any] | None, global_mysql: int, files_forever: bool) -> RetentionConfig:

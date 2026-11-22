@@ -6,7 +6,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from avidbackup.databases.base import DbDumper, DumpResult
+from avidbackup.databases.base import DbDumper, DumpResult, with_tunnel
 from avidbackup.databases.compress import maybe_gzip
 from avidbackup.secure_cli import pgpass_file, resolve_secret
 from avidbackup.util_bin import find_pg_dump, find_psql
@@ -21,6 +21,7 @@ class PostgresDumper(DbDumper):
     def _password(self) -> str:
         return resolve_secret(self.db.password, getattr(self.db, "password_env", "") or "")
 
+    @with_tunnel
     def test_connection(self) -> None:
         psql = find_psql()
         if not psql:
@@ -46,6 +47,7 @@ class PostgresDumper(DbDumper):
         if proc.returncode != 0:
             raise RuntimeError(proc.stderr.decode("utf-8", errors="replace")[:400])
 
+    @with_tunnel
     def dump(self, dest_dir: Path) -> DumpResult:
         exe = find_pg_dump()
         if not exe:
@@ -112,6 +114,7 @@ class PostgresDumper(DbDumper):
             table_report=self.table_sizes(),
         )
 
+    @with_tunnel
     def table_sizes(self):
         psql = find_psql()
         if not psql:

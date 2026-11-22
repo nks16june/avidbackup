@@ -27,6 +27,18 @@
 | FTPS MITM | `verify_tls` default true |
 | Password echo in HTML | Blank inputs + “leave blank to keep” |
 
+## SSH tunnel and PHP helper
+
+| Threat | Mitigation |
+|---|---|
+| Man-in-the-middle on the SSH connection | Same host-key checking as SFTP: trust on first use, a mismatch is refused, optional strict mode |
+| Someone calling the PHP helper on your site | 256-bit random token in a POST body (never the URL); only its SHA-256 hash is stored in the file; constant-time compare; random file name; POST only; lockout after 5 wrong tokens in 10 minutes; optional IP allow-list; replies are `no-store` / `noindex` |
+| The helper being used to read or change other data | It dumps one configured database with read-only statements from one consistent snapshot, runs no shell commands and lists no files |
+| The token crossing the internet in clear text | AvidBackup refuses `http://` helper URLs (except loopback), verifies the TLS certificate and refuses redirects |
+| A truncated or tampered download stored as a good backup | The stream must be valid gzip and end with the dump's completion marker, otherwise it is discarded |
+| Database login exposed by the helper file | It sits in the PHP file like `wp-config.php` does. Remove the helper when not needed (`avidbackup helper remove`); reinstalling rotates the token and deletes the old file |
+| Secrets in the UI | The connection page never renders saved SSH passwords or helper tokens; blank fields keep the saved value |
+
 ## Sign-in and the environment switches
 
 | Setting | Effect |

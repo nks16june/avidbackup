@@ -69,7 +69,7 @@ Open **Backup calendar → a site → a day** to browse that day's files and dat
 | | |
 |---|---|
 | **File transfer** | FTP, FTPS (certificate verified by default), SFTP (host key trust-on-first-use) |
-| **Databases** | MySQL / MariaDB, PostgreSQL, SQLite. MySQL uses a built-in Python dump if `mysqldump` is missing. PostgreSQL needs `pg_dump`; on Windows the app can download it for you (about 5 MB, checksum-verified) |
+| **Databases** | MySQL / MariaDB, PostgreSQL, SQLite, reached directly, through an **SSH tunnel**, or (MySQL) through a **PHP helper** when the host blocks remote MySQL. MySQL uses a built-in Python dump if `mysqldump` is missing. PostgreSQL needs `pg_dump`; on Windows the app can download it for you (about 5 MB, checksum-verified) |
 | **Scheduling** | Windows Task Scheduler or the always-on agent; cron on Linux and macOS |
 | **Notifications** | Optional: webhook, email, or phone through ntfy (off by default, generic messages unless you opt in) |
 
@@ -84,7 +84,7 @@ Found a vulnerability? Please report it privately, see [SECURITY.md](SECURITY.md
 
 ## Limitations
 
-- Many **shared hosts block remote MySQL**. Allow your IP in the hosting panel, or database backup will fail while file backup still works.
+- Many **shared hosts block remote MySQL**. Allow your IP in the hosting panel, or use an **SSH tunnel** or the **PHP helper**, see [docs/HOSTS-WITHOUT-REMOTE-MYSQL.md](docs/HOSTS-WITHOUT-REMOTE-MYSQL.md). Otherwise database backup fails while file backup still works.
 - The installer is **not code-signed yet** (SmartScreen warning). Linux and macOS have no installer. See the [roadmap](#roadmap).
 - Backups are **not encrypted** at rest. Use disk encryption for sensitive sites.
 
@@ -107,6 +107,8 @@ avidbackup app              # open the UI (tray with the [desktop] extra)
 avidbackup run              # back up every enabled site
 avidbackup run --account example.com
 avidbackup verify           # check files and the newest dumps
+avidbackup db-test --account example.com    # test how each database is reached
+avidbackup helper install --account example.com --db main   # PHP helper for hosts without remote MySQL
 avidbackup token            # print the UI sign-in link
 avidbackup doctor           # check Python, tools and permissions
 avidbackup tools install-postgres   # Windows: fetch pg_dump / psql
@@ -114,7 +116,7 @@ avidbackup tools install-postgres   # Windows: fetch pg_dump / psql
 
 ## Documentation
 
-[Install](docs/INSTALL.md) · [Configuration](docs/CONFIGURATION.md) · [Restore](docs/RESTORE.md) · [Security model](docs/SECURITY-MODEL.md) · [Comparison](docs/COMPARISON.md) · [Packaging](docs/PACKAGING.md) · [Changelog](CHANGELOG.md)
+[Install](docs/INSTALL.md) · [Hosts that block remote MySQL](docs/HOSTS-WITHOUT-REMOTE-MYSQL.md) · [Configuration](docs/CONFIGURATION.md) · [Restore](docs/RESTORE.md) · [Security model](docs/SECURITY-MODEL.md) · [Comparison](docs/COMPARISON.md) · [Packaging](docs/PACKAGING.md) · [Changelog](CHANGELOG.md)
 
 ## Roadmap
 
@@ -122,7 +124,7 @@ avidbackup tools install-postgres   # Windows: fetch pg_dump / psql
 - [x] Day-by-day restore points and a coverage calendar
 - [ ] Code-signed Windows installer (SignPath) and Microsoft Store listing
 - [ ] macOS `.dmg` and Linux AppImage / `.deb`; systemd and launchd agents
-- [ ] PHP dump helper and SSH-tunnel assist for hosts without remote MySQL
+- [x] SSH tunnel and PHP helper for hosts without remote MySQL
 - [ ] Optional encryption of backups at rest
 - [ ] Optional offsite sync (rclone / S3) after a successful local backup
 - [ ] MongoDB

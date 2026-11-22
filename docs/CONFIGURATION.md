@@ -83,4 +83,7 @@ Single supported config file (created by `avidbackup init` or the UI).
 - `databases[].ssl` — MySQL/Postgres TLS (`PGSSLMODE=require` / PyMySQL ssl); default false
 - `databases[].path` — SQLite file (local path, or remote path fetched via FTP/SFTP)
 - `databases[].discover_from_site` — scan brand-neutral CMS configs (WordPress `define()`, Joomla, `.env`, generic PHP profile arrays) under the remote web root
+- `databases[].via` — how the database is reached: `direct` (default) | `ssh` (SSH tunnel) | `php` (PHP helper). See [HOSTS-WITHOUT-REMOTE-MYSQL.md](HOSTS-WITHOUT-REMOTE-MYSQL.md)
+- `databases[].ssh_*` — for `via: ssh`: `ssh_same_as_ftp` (reuse the site's SFTP login), `ssh_host`, `ssh_port` (22), `ssh_user`, `ssh_password` / `ssh_password_env`, `ssh_key_file`, `ssh_key_passphrase_env`, `ssh_host_key_policy` (`tofu` | `strict` | `insecure`). `host` / `port` are then the database address **as seen from the SSH server**
+- `databases[].helper_*` — for `via: php`: `helper_url`, `helper_token` / `helper_token_env`, `helper_path` (where the file was uploaded). Written by `avidbackup helper install`; you normally do not edit these
 - On Windows, POSIX `chmod 600` is a no-op — restrict NTFS ACLs on `accounts.json`
